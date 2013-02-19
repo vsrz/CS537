@@ -1,4 +1,4 @@
-/* 
+/*
  * File:   netutils.hpp
  * Author: jvillegas
  *
@@ -16,11 +16,13 @@
 #include <netinet/in.h>
 #include <cstring>
 #include <string>
+#include <iostream>
+
 
 namespace netutils {
 
     std::string getIpAddr(std::string hostname);
-
+    void resolveIpAddr(std::string hostname);
 }
 
 

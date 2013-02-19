@@ -1,4 +1,4 @@
-/* 
+/*
  * File:   netutils.hpp
  * Author: jvillegas
  *
@@ -7,20 +7,20 @@
 
 #include "netutils.hpp"
 
+
 namespace netutils {
 
     /// Returns a single IP address based on a hostname
     std::string getIpAddr(std::string hostname) {
         struct addrinfo hints, *res;
-        char ipstr[INET6_ADDRSTRLEN];    
-        char* err;
+        char ipstr[INET6_ADDRSTRLEN];
         int status;
         void* addr;
 
 
         status = getaddrinfo(hostname.c_str(), NULL, &hints, &res);
-        if(status != 0) {        
-            return "";
+        if(status != 0) {
+            return std::string();
         }
 
         if(res->ai_family == AF_INET) {
@@ -37,4 +37,14 @@ namespace netutils {
 
     }
 
+    /* Resolves hostname and prints result */
+    void resolveIpAddr(std::string hostname) {
+
+        std::string res = getIpAddr(hostname);
+        if(res == "")
+            std::cout << "Unable to resolve " << hostname << "\n";
+        else
+            std::cout << hostname << " has address " << res << "\n";
+
+    }
 }
