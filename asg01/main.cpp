@@ -17,7 +17,7 @@ using namespace netutils;
 
 int main(int argc, char** argv) {
     string site;
-    string res;
+    string res("127.0.0.1");
 /*
     if(argc != 2) {
         cout << "Usage: " << argv[0] << " <ip or hostname>" << endl;
@@ -26,14 +26,9 @@ int main(int argc, char** argv) {
 
     resolveIpAddr(argv[1]);
 */
-    try
-    {
-		SocketServer s(131,131,131);		
-    }
-    catch (SocketServerException e)
-    {
-		cout << e << endl;
-    }
+
+	SocketServer sock();
+
 
 
     
