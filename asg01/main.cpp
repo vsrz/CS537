@@ -18,16 +18,16 @@ using namespace netutils;
 int main(int argc, char** argv) {
     string site;
     string res("127.0.0.1");
-
+/*
     if(argc != 2) {
         cout << "Usage: " << argv[0] << " <ip or hostname>" << endl;
         return 1;
     }
 
     resolveIpAddr(argv[1]);
+*/
 
-
-//	SocketServer sock;
+	SocketServer sock;
 
 
     

@@ -30,6 +30,7 @@ class SocketServer
 	
 	private:
 		static const int LISTEN_BACKLOG = 20;
+		static const int MAXLINE = 1024;
 		int listenfd, connfd, status; // socket descriptors
 		pthread_t threadid;   // thread id
 		socklen_t sin_size;
@@ -39,6 +40,7 @@ class SocketServer
 		string bind_iface, bind_port;		
 		void listenSocket();
 		void *get_in_addr(struct sockaddr *);
+		void *clientHandler(void *arg);
 	public:
 		// ai_family, ai_socktype, ai_protocol
 		SocketServer(string, string, int, int);
@@ -64,7 +66,7 @@ SocketServer::SocketServer(string host = "localhost",
 	
 	
 	listenSocket();
-//	waitConnect();
+	waitConnect();
 	
 }
 
@@ -100,7 +102,7 @@ void SocketServer::waitConnect()
 		connfd = accept ( listenfd, (struct sockaddr *) &remote_addr, &sin_size);
 		if (connfd == -1)
 		{
-			throw new SocketServerException("incoming connection could not be established");			
+			throw new SocketServerException((char *)"incoming connection could not be established");
 			continue;
 		}
 		
@@ -111,15 +113,10 @@ void SocketServer::waitConnect()
 		
 		cout << "server: incoming connection from " << s;
 		
-		if ( !fork() )
-		{
-			if ( send ( connfd, "Hello world", 13, 0 ) == -1)
-				perror ("send");
-			close ( connfd );
-			exit(0);
-		}
-		
-		close(connfd);
+        if (pthread_create(&threadid, NULL, clientHandler, (void *)&connfd) != 0) {
+           fprintf(stderr, "Error unable to create thread, errno = %d (%s) \n",
+                   errno, strerror(errno));
+        }
 	}
 		
 			
@@ -133,6 +130,31 @@ void *SocketServer::get_in_addr(struct sockaddr *sa)
     }
 
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+void *SocketServer::clientHandler(void *arg)
+{
+
+    char str[MAXLINE];
+    int  i, n;
+
+    int  fd = *(int*)(arg);
+
+    while (1) {
+        if ((n = read(fd, str, MAXLINE)) == 0) {
+            close (fd);
+            break;
+        }
+
+        for (i = 0; i < strlen(str); i++) {
+            if (str[i] >= 97 && str[i] <= 122) {
+                str[i] = str[i] - 32;
+            }
+        }
+
+        write(fd, str, strlen(str));
+    }
+	return;
 }
 		
 #endif
