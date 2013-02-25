@@ -31,7 +31,7 @@ namespace netutils {
             addr = &(ip->sin6_addr);
         }
 
-        inet_ntop(res->ai_family, addr, ipstr, sizeof ipstr);
+        inet_ntop(res->ai_family, addr, ipstr, sizeof ipstr);		
         return ipstr;
 
 
