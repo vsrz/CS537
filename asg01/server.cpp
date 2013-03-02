@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 #include <stdio.h>
 #include <string.h>
 #include <fstream>
@@ -36,48 +37,25 @@ void fileHandler(string s, int fd)
             write(fd, buffer, length);
         }
     }
-    //delete[] buffer;
     instream.close();
 
 }
 
 
-/*
- *
- * GET / HTTP/1.0
- *
- * HTTP/1.1 200 OK
- * Date: Thu, 28 Feb 2013 01:58:06 GMT
- * Server: Apache/2.2.22 (Ubuntu)
- * Last-Modified: Fri, 14 Dec 2012 22:29:59 GMT
- * ETag: "df9ec-3e-4d0d79268e548"
- * Accept-Ranges: bytes
- * Content-Length: 62
- * Vary: Accept-Encoding
- * Connection: close
- * Content-Type: text/html
- *
- * <meta http-equiv="refresh" content="0; url=/0x7673727a.html">
- * Connection closed by foreign host.
- *
- *
- */
-
-/*
- * GET / HTTP/1.1
- * Host: localhost
- * Connection: keep-alive
- * Accept: text/html,application/xhtml+xml,application/xml
- */
 
 void httpGet(vector<string> s, int fd)
 {
-    // 5, length -9
     string request, path, proto;
     cout << "Received: " << s[0] << endl;
     request = s[0].substr(0,3);
     path = s[0].substr(5,s[0].length() - 14);
-    proto = s[0].substr(s[0].length() - 10,s[0].length());
+    proto = s[0].substr(s[0].length() - 8,s[0].length());
+
+    cout << "Proto is: " << proto << endl;
+
+    string httpOK = proto + " 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n";
+    cout << "httpOK is: " << httpOK << endl;
+    write(fd, httpOK.c_str(), httpOK.length()+8);
  
     cout << "Path: " << path << endl;
     fileHandler(path,fd); 
@@ -99,8 +77,21 @@ void *clientHandler(void *arg)
         if ((n = read(fd, str, MAXLINE)) == 0) {
             close (fd);
             conn = false;
+	    cout << "Client disconnected.\n";
+	    return NULL;
         }
-	
+
+	cli_buf.clear();
+//	vector<string> split;
+	string req(str);
+	stringstream ss(req);
+	string item;
+	while (getline(ss, item, '\r'))
+	{
+		cli_buf.push_back(item);
+	}
+//	cout << "Got past spliting!" << endl;
+/*
 	pch = strtok(str,"\r");
         while (pch != NULL)
 	{
@@ -108,26 +99,15 @@ void *clientHandler(void *arg)
         	cli_buf.push_back(string(pch));		
 		pch = strtok(NULL, "\r\n");
 	}
+*/
+
+	if (cli_buf[0].substr(0, 3) == "GET")
+	{
+		httpGet(cli_buf, fd);
+	}
 
 	cout << "clibuf: " << cli_buf[0] << endl;
 
-/*
-	string last = cli_buf.back();
-	cout << "last: " << last << endl;
-        if (last == "\r")
-        {
-            if(cli_buf[0].substr(0,3) == "GET") 
-            {
-  */              httpGet(cli_buf, fd);
-    //        }
-
-            close(fd);
-            conn = false;
-      //  }
-
-        //
-        //fileHandler("index.html",fd);
-        //close(fd);
         
     }
     
@@ -137,9 +117,9 @@ int main(int argc, char *argv[])
 {
 
 	int	listenfd, connfd;
-    pthread_t tid;
+        pthread_t tid;
 	socklen_t clilen;
-	char bind_addr[] = "144.37.205.10";
+	char bind_addr[] = "144.37.1.24";
 	int bind_port = 7777;
 	struct 	sockaddr_in cliaddr, servaddr;
 
@@ -182,11 +162,10 @@ int main(int argc, char *argv[])
 			}
 		}
 
-        if (pthread_create(&tid, NULL, clientHandler, (void *)&connfd) != 0) {
-           fprintf(stderr, "Error unable to create thread, errno = %d (%s) \n",
-                   errno, strerror(errno));
-        }
+	        if (pthread_create(&tid, NULL, clientHandler, (void *)&connfd) != 0) {
+	           fprintf(stderr, "Error unable to create thread, errno = %d (%s) \n",
+	                   errno, strerror(errno));
+	        }
 
 	}
 }
-
