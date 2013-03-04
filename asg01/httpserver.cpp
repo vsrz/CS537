@@ -30,7 +30,7 @@ const int backlog = 4;
 /* consists of the different parts of an HTTP request */
 struct HttpRequest
 {
-	string command;
+	string method;
 	string path;
 	string protocol;
 	vector<string> headers;
@@ -159,6 +159,30 @@ void httpError(HttpRequest *http, int fd)
 	
 }
 
+/* handle and respond to an http delete request */
+void httpDelete(HttpRequest *http, int fd)
+{
+	string request, resp_header(""), resp_body("");
+		
+	// Strip the starting slash off the path
+	if( findInString("/",http->path) == 1 )
+		http->path = http->path.substr( 1,http->path.length() );
+
+	if( remove( http->path.c_str() ) == 0 )
+	{
+		responseHttpOk(resp_header, http->protocol);
+	} 
+	else
+	{
+		responseHttpNotFound(resp_header, http->protocol);
+	}
+	
+	getDateTimeRfc2822(resp_header);
+	responseServerHeader(resp_header);
+	sendHttpResponse(resp_header + "\r\n", fd);
+	
+}
+
 void httpGet(HttpRequest *http, int fd)
 {
     string request, resp_header(""), resp_body("");
@@ -206,7 +230,7 @@ HttpRequest *parseRequest(string s)
 		switch ( i )
 		{
 			case 0:
-				http->command = token;
+				http->method = token;
 				break;
 			case 1:
 				http->path = token;
@@ -239,12 +263,6 @@ HttpRequest *parseRequest(string s)
 	return http;
 }
 
-/* handle and respond to an http delete request */
-void httpDelete(HttpRequest *http, int fd)
-{
-
-}
-
 /* handle and respond to an http put request */
 void httpPut(HttpRequest *http, int fd)
 {
@@ -260,12 +278,11 @@ void httpHead(HttpRequest *http, int fd)
 	if( findInString("/",http->path) == 1 )
 		http->path = http->path.substr( 1,http->path.length() );
 
-	/* default to index.html if none provided */
     if (http->path == "")
     	http->path = "index.html";
     
 	
-	/* If file doesn't exist, display a 404 error */
+	/* If file doesn't exist, return a 404 error */
 	if( fileExists( http->path ) )
 	{
 		responseHttpOk( resp_header, http->protocol );		
@@ -321,13 +338,13 @@ void *clientHandler(void *arg)
 		http = parseRequest(request);
 
 		// Determine the request type and move forward
-		if ( http->command == "GET" )
+		if ( http->method == "GET" )
 			httpGet(http, fd);
-		else if ( http->command == "DELETE" )
+		else if ( http->method == "DELETE" )
 			httpDelete(http, fd);
-		else if ( http->command == "HEAD" )
+		else if ( http->method == "HEAD" )
 			httpHead(http, fd);
-		else if ( http->command == "PUT" )
+		else if ( http->method == "PUT" )
 			httpPut(http, fd);
 		else 
 			httpError(http, fd);
@@ -336,7 +353,7 @@ void *clientHandler(void *arg)
 			conn = false;
 			
 #ifdef DEBUG
-		cout << "command: " << http->command << endl;
+		cout << "command: " << http->method << endl;
 		cout << "path: " << http->path << endl;
 		cout << "protocol: " << http->protocol << endl; 
 		for ( vector<string>::iterator it = http->headers.begin();
