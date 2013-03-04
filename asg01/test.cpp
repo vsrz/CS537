@@ -104,11 +104,57 @@ string stringToUpper(string s)
 	return str;
 }
 
+/* consists of the different parts of an HTTP request */
+struct HttpRequest
+{
+	string command;
+	string path;
+	string protocol;
+	vector<string> headers;
+	string body;
+
+};
+
+void line(string s)
+{
+	stringstream ss(s);
+	string token;
+	string res;
+	while( getline( ss, token, ' ' ) )
+	{		
+		res = token;
+		cout << res;
+	}
+}
+
 int main()
 {
-	string response("");
-	cout << response.length() << endl;
-	
+	string s = "GET /ajsdkf.html HTTP/1.1\r\nHost: www.csusm.edu\r\nConnection: close\r\nContent-Length: 19\r\n\r\nname=ruturajv&sex=m";
+
+	HttpRequest *http;
+	http = parseRequest(s);
+	cout << "command: " << http->command << endl;
+	cout << "path: " << http->path << endl;
+	cout << "protocol: " << http->protocol << endl;
+	for ( vector<string>::iterator it = http->headers.begin();
+			it != http->headers.end();
+			++it)
+	{
+		cout << *it << endl;
+	}
+	cout << "body: " << http->body;
+	delete http;
 	return 0;
 
 }
+
+
+
+
+
+
+
+
+
+
+

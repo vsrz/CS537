@@ -15,98 +15,40 @@
 #include <cctype>
 #include <ctime>
 
+#include "fileutils.h"
+#include "dateutils.h"
+
 #define MAXLINE	32768
 
 using namespace std;
+using namespace fileutils;
+using namespace dateutils;
 
 const int backlog = 4;
 
-/* gets the extension of a filename */
-string getFileExtension(string fn)
-{
-	return( fn.substr( fn.find_last_of(".") + 1 ) );
-}
 
-/* converts file to uppercase */
-string stringToUpper(string s)
-{
-	string str;
-	for( size_t l = 0; l < s.length(); l++ )
-		str += toupper(s[l]);
-	return str;
-}
 
-/* returns bool based on file existing */
-bool fileExists(string fn)
+// return the position in the string that the needle is found, 0 if not found
+int findInString(string needle, string haystack)
 {
-	ifstream in;
-	in.open(fn.c_str(), ios::binary);
-	if(in.is_open())
-	{
-		in.close();
-		return true;
-	}
-	return false;
+	size_t found;
+	found = haystack.find(needle);
+	if( found != string::npos )
+		return found+1;
+	return 0;
 
 }
 
-/* Read file and return the file in a string 
- * assume it exists
- */
-void readFile(string &s, string fn)
+/* consists of the different parts of an HTTP request */
+struct HttpRequest
 {
-	ifstream f(fn.c_str(), ios::in | ios::binary);
-    
-	if( f )
-	{
-		string content;
-		
-		/* Jump to the end and grab the length */
-		f.seekg( 0, ios::end );
-		content.resize( f.tellg() );
-		f.seekg( 0, ios::beg );
-		
-		/* read close and return the file */
-		f.read(&content[0], content.size());
-		f.close();		
-		
-		s += content;
-	}
-		
-}	
+	string command;
+	string path;
+	string protocol;
+	vector<string> headers;
+	string body;
 
-/* Returns current date header specified in RFC 2822 */
-void getDateTimeRfc2822(string &s)
-{
-	// current date/time based on current system
-	time_t now = time(0);
-	stringstream ss;
-	string str;	
-	tm *tm = gmtime(&now);
-	
-	/* Display format for months and days of the week */
-	const char * weekday[] = { "Sun", "Mon", "Tue", "Wed", 
-		"Thu", "Fri", "Sat" };
-	const char * month [] = { "Jan", "Feb", "Mar", "Apr", "May",
-		"Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-		
-	/* http header */
-	ss << "Date: ";
-
-	/* Weekday array format from above */
-	ss << weekday[tm->tm_wday] << ", "  << tm->tm_mday << " ";
-	
-	/* Month from array, and current year + 1900 */
-	ss << month[tm->tm_mon] << " " << (1900 + tm->tm_year) << " ";
-	
-	/* hr, min, and sec with leading zero check */
-	ss << (tm->tm_hour < 10 ? "0" : "") << tm->tm_hour << ":";
-	ss << (tm->tm_min < 10 ? "0" : "") << tm->tm_hour << ":";
-	ss << (tm->tm_sec < 10 ? "0" : "") << tm->tm_sec;
-	ss << " GMT" << "\r\n";
-	s += ss.str();
-	
-}
+};
 
 /* Puts the response onto the wire */
 void sendHttpResponse(const string response, int fd)
@@ -155,7 +97,6 @@ void responseContentType ( string &s, string filename, string charset = "UTF-8")
 		str += "text/css";
 	else 
 		str += "application/octet-stream";
-
 	
 	s +=  str + "; " + charset + "\r\n";
 
@@ -171,32 +112,109 @@ void responseContentLength( string &s, string body )
 	s += "\r\n";
 }
 
-void httpGet(vector<string> s, int fd)
+/* respond to an invalid http request */
+void httpBadRequest(HttpRequest *http, int fd)
 {
-    string request, path, proto, header(""), body("");
-    request = s[0].substr(0,3);
-    path = s[0].substr(5,s[0].length() - 14);
-    proto = s[0].substr(s[0].length() - 8,s[0].length());
+
+}
+
+void httpGet(HttpRequest *http, int fd)
+{
+    string request, resp_header(""), resp_body("");
+
+
+	// Strip the slash off the path
+	if( findInString("/",http->path) == 1 )
+		http->path = http->path.substr( 1,http->path.length() );
 
 	/* default to index.html if none provided */
-    if (path == "")
-    	path = "index.html";
+    if (http->path == "")
+    	http->path = "index.html";
     
+	
 	/* If file doesn't exist, display a 404 error */
-	if(fileExists(path))
-		responseHttpOk(header, proto);		
+	if(fileExists(http->path))
+		responseHttpOk(resp_header, http->protocol);		
 	else
 	{
-		responseHttpNotFound(header, proto);
-		path = "404.html";
+		responseHttpNotFound(resp_header, http->protocol);
+		http->path = "404.html";
 	}
 	
-	getDateTimeRfc2822(header);
-	responseContentType(header, path);
-	readFile(body, path);
-	responseContentLength(header, body);
-	sendHttpResponse(header + "\r\n" + body, fd);		
+	getDateTimeRfc2822(resp_header);
+	responseContentType(resp_header, http->path);
+	readFile(resp_body, http->path);
+	responseContentLength(resp_header, resp_body);
+	sendHttpResponse(resp_header + "\r\n" + resp_body, fd);		
 	
+}
+
+/* breaks a string object into an http request struct */
+HttpRequest *parseRequest(string s)
+{
+	HttpRequest *http = new HttpRequest;
+	stringstream ss( s );
+	string token,crlf("\r\n");
+	int body = 0;
+
+	/* break string into chunks delimited by whitespace
+	   but only read the first 3 chunks to get command section */
+	for ( int i = 0; i < 3; ++i )
+	{
+		string token;
+		ss >> token;
+		switch ( i )
+		{
+			case 0:
+				http->command = token;
+				break;
+			case 1:
+				http->path = token;
+				break;
+			case 2:
+				http->protocol = token;
+				break;
+		}		
+	}
+
+	/* now stick the rest of the string into the string vector 
+		but only if the line isn't blank */
+	while( getline( ss, token ) )
+	{
+		if ( token.length() != 1 ) 
+		{
+			http->headers.push_back(token);
+		}
+		else if( body )
+		{
+			// if content length header sent, read the body now
+			getline( ss, token );
+			http->body = token;
+		}
+
+		// keep flag for content-length
+		body += findInString( "Content-Length: ", token);
+	}
+
+	return http;
+}
+
+/* handle and respond to an http delete request */
+void httpDelete(HttpRequest *http, int fd)
+{
+
+}
+
+/* handle and respond to an http put request */
+void httpPut(HttpRequest *http, int fd)
+{
+
+}
+
+/* handle and respond to an http head request */
+void httpHead(HttpRequest *http, int fd)
+{
+
 }
 
 void *clientHandler(void *arg)
@@ -208,34 +226,64 @@ void *clientHandler(void *arg)
     bool conn = true;
     int  fd = *(int*)(arg);
     cout << "Client accepted" << endl;
+	HttpRequest *http;
 
     while (conn) {
         bzero(str,MAXLINE); 
         if ((n = read(fd, str, MAXLINE)) == 0) {
             close (fd);
             conn = false;
-	    cout << "Client disconnected.\n";
-	    return NULL;
+	        cout << "Client disconnected.\n";
+    	    return NULL;
         }
 
-	cli_buf.clear();
-	string req(str);
-	stringstream ss(req);
-	string item;
-	while (getline(ss, item, '\n'))
-	{
-		cli_buf.push_back(item.substr(0, item.length()-1));
-	}
+		/* Send the entire buffer to the read processor
+  		   and return a pointer to an http request object */
+		http = parseRequest(str);
+
+		// Determine the request type and move forward
+		if ( http->command == "GET" )
+			httpGet(http, fd);
+		else if ( http->command == "DELETE" )
+			httpDelete(http, fd);
+		else if ( http->command == "HEAD" )
+			httpHead(http, fd);
+		else if ( http->command == "PUT" )
+			httpPut(http, fd);
+		else 
+			httpBadRequest(http, fd);
+
+		
+#ifdef DEBUG
+		cout << "command: " << http->command << endl;
+		cout << "path: " << http->path << endl;
+		cout << "protocol: " << http->protocol << endl; 
+		for ( vector<string>::iterator it = http->headers.begin();
+				it != http->headers.end();
+				++it)
+		{
+			cout << *it << endl;
+		}
+		cout << "body: " << http->body;
+#endif
+
+		delete http;
+		/*
+	    cli_buf.clear();
+	    string req(str);
+	    stringstream ss(req);
+	    string item;
+	    while (getline(ss, item, '\n'))
+	    {
+		    cli_buf.push_back(item.substr(0, item.length()-1));
+	    }
 
 
-	if (cli_buf[0].substr(0, 3) == "GET")
-	{
-		httpGet(cli_buf, fd);
-	}
-
-	cout << "clibuf: " << cli_buf[0] << endl;
-
-        
+	    if (cli_buf[0].substr(0, 3) == "GET")
+	    {
+		    httpGet(cli_buf, fd);
+	    }
+		*/
     }
     return NULL;
 }
@@ -244,7 +292,7 @@ int main(int argc, char *argv[])
 {
 
 	int	listenfd, connfd;
-        pthread_t tid;
+    pthread_t tid;
 	socklen_t clilen;
 	char bind_addr[] = "144.37.205.10";
 	int bind_port = 7777;
@@ -254,7 +302,7 @@ int main(int argc, char *argv[])
 	if (listenfd == -1)
 	{
 		fprintf(stderr, "Error unable to create socket, errno = %d (%s) \n",
-                errno, strerror(errno));
+		errno, strerror(errno));
 		return -1;
 	}
 
@@ -272,9 +320,9 @@ int main(int argc, char *argv[])
 	}
 
 	if (listen(listenfd, backlog) == -1) {
-        fprintf(stderr, "Error listening for connection request, errno = %d (%s) \n",
-                errno, strerror(errno));
-        return -1;
+		fprintf(stderr, "Error listening for connection request, errno = %d (%s) \n",
+		errno, strerror(errno));
+		return -1;
 	}
 
 
