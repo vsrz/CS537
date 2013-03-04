@@ -50,6 +50,11 @@ struct HttpRequest
 
 };
 
+void responseServerHeader(string &s)
+{
+	s += "Server: CS537_VILLEPOWER/1.0\r\n";
+}
+
 /* Puts the response onto the wire */
 void sendHttpResponse(const string response, int fd)
 {
@@ -66,6 +71,13 @@ void responseHttpOk(string &s, const string protocol)
 void responseHttpNotFound(string &s, const string protocol)
 {
 	s += protocol + "404 Not Found\r\n";
+}
+
+
+/* Send the 400 page */
+void responseHttpBadRequest(string &s, const string protocol)
+{
+	s += protocol + "400 Bad Request\r\n";
 }
 
 /* Return HTTP Header "Content-Type" */
@@ -112,16 +124,26 @@ void responseContentLength( string &s, string body )
 	s += "\r\n";
 }
 
-/* respond to an invalid http request */
-void httpBadRequest(HttpRequest *http, int fd)
+/* handle and respond to an invalid http request */
+void httpError(HttpRequest *http, int fd)
 {
+	string resp_header(""), resp_body("");
 
+	// force an error page
+	http->path = "400.html";
+	responseHttpBadRequest(resp_header, http->protocol);
+	responseContentType(resp_header, http->path);
+	readFile(resp_body, http->path);
+	responseContentLength(resp_header, resp_body);
+	getDateTimeRfc2822(resp_header);
+	responseServerHeader(resp_header);
+	sendHttpResponse(resp_header + "\r\n" + resp_body, fd);
+	
 }
 
 void httpGet(HttpRequest *http, int fd)
 {
     string request, resp_header(""), resp_body("");
-
 
 	// Strip the slash off the path
 	if( findInString("/",http->path) == 1 )
@@ -251,9 +273,14 @@ void *clientHandler(void *arg)
 		else if ( http->command == "PUT" )
 			httpPut(http, fd);
 		else 
-			httpBadRequest(http, fd);
+			httpError(http, fd);
 
-		
+		if ( http->protocol == "HTTP/1.0" )
+		{
+			conn = false;
+			close(fd);
+		}
+
 #ifdef DEBUG
 		cout << "command: " << http->command << endl;
 		cout << "path: " << http->path << endl;
