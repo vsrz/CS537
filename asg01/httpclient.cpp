@@ -41,13 +41,14 @@ int main(int argc, char *argv[])
 	}
 	
 	string url = argv[1];
-	string delim = "/";
-	unsigned found = url.find(delim);
-	string url_h = url.substr(0, found);
+	char delim = '/';
+	size_t found = url.find(delim);
+
 	if (found != std::string::npos)
 	{
+		string url_h = url.substr(0, found);
 		server = gethostbyname(url_h.c_str());
-		path = url.substr(found, url.length());
+		path = url.substr(found, url.length()-1);
 		host = url_h;
 	}
 	else
@@ -141,9 +142,9 @@ int main(int argc, char *argv[])
 
 void *conn(void *arg)
 {
-	char * ret;
+	char * ret = NULL;
 	int reqType = *(int*) (arg);
-        int sockfd, newsockfd, clilen, n;
+        int sockfd, n;
         struct sockaddr_in serv_addr;
 
         char buffer[256];
@@ -180,17 +181,17 @@ void *conn(void *arg)
 	switch(reqType)
 	{
 		case 1:
-			req_str = "GET "+path+" HTTP/1."+httpVer+"\nHost: "+host+"\nConnection: keep-alive\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\n\n";
+			req_str = "GET "+path+" HTTP/1."+httpVer+"\r\nHost: "+host+"\r\nConnection: keep-alive\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n\r\n";
 			break;
 		case 2:
-			req_str = "HEAD "+path+" HTTP/1."+httpVer+"\nHost: "+host+"\n\n";
+			req_str = "HEAD "+path+" HTTP/1."+httpVer+"\r\nHost: "+host+"\r\n\r\n";
 			cout << "req_str is: " << req_str << endl;
 			break;
 		case 3:
-			req_str = "PUT "+path+" HTTP/1."+httpVer+"\nHost: "+host+"\n\n";
+			req_str = "PUT "+path+" HTTP/1."+httpVer+"\r\nHost: "+host+"\r\n\r\n";
 			break;
 		case 4:
-			req_str = "DELETE "+path+" HTTP/1."+httpVer+"\nHost: "+host+"\n\n";
+			req_str = "DELETE "+path+" HTTP/1."+httpVer+"\r\nHost: "+host+"\r\n\r\n";
 			break;
 	}
 
