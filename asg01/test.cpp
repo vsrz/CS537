@@ -89,6 +89,17 @@ string getDateTimeRfc2822()
 	return str;
 }
 
+// return the position in the string that the needle is found, 0 if not found
+int findInString(string needle, string haystack)
+{
+	size_t found;
+	found = haystack.find(needle);
+	if( found != string::npos )
+		return found+1;
+	return 0;
+
+}
+
 string fileEndsWith(string fn)
 {
 	return( fn.substr( fn.find_last_of(".") + 1 ) );
@@ -112,7 +123,6 @@ struct HttpRequest
 	string protocol;
 	vector<string> headers;
 	string body;
-
 };
 
 void line(string s)
@@ -127,22 +137,95 @@ void line(string s)
 	}
 }
 
+
+/* breaks a string object into an http request struct */
+HttpRequest *parseRequest(string s)
+{
+	HttpRequest *http = new HttpRequest;
+	stringstream ss( s );
+	string token,crlf("\r\n");
+	int body = 0;
+
+	/* break string into chunks delimited by whitespace
+	   but only read the first 3 chunks to get command section */
+	for ( int i = 0; i < 3; ++i )
+	{
+		string token;
+		ss >> token;
+		switch ( i )
+		{
+			case 0:
+				http->command = token;
+				break;
+			case 1:
+				http->path = token;
+				break;
+			case 2:
+				http->protocol = token;
+				break;
+		}		
+	}
+
+	/* now stick the rest of the string into the string vector 
+		but only if the line isn't blank */
+	while( getline( ss, token ) )
+	{
+		if ( token.length() != 1 ) 
+		{
+			http->headers.push_back(token);
+		}
+		else if( body )
+		{
+			// if content length header sent, read the body now
+			getline( ss, token );
+			http->body = token;
+		}
+
+		// keep flag for content-length
+		body += findInString( "Content-Length: ", token);
+	}
+
+	return http;
+}
+
+/* takes the header list and a header key and returns the value found */
+string getHeaderValue(vector<string> h, string header)
+{	
+	for ( vector<string>::iterator it = h.begin();
+		it != h.end();
+		++it)
+	{
+		string i(*it);
+		if(findInString(header, i) == 1)
+		{
+			return i.substr(findInString(" ", i),i.size());
+		}
+	}
+	return string("");
+}
+
+
 int main()
 {
 	string s = "GET /ajsdkf.html HTTP/1.1\r\nHost: www.csusm.edu\r\nConnection: close\r\nContent-Length: 19\r\n\r\nname=ruturajv&sex=m";
 
 	HttpRequest *http;
 	http = parseRequest(s);
-	cout << "command: " << http->command << endl;
+	string s2 = getHeaderValue(http->headers, "Connection");
+	cout << s2 << endl;
+/*	cout << "command: " << http->command << endl;
 	cout << "path: " << http->path << endl;
 	cout << "protocol: " << http->protocol << endl;
-	for ( vector<string>::iterator it = http->headers.begin();
+*/
+/*	for ( vector<string>::iterator it = http->headers.begin();
 			it != http->headers.end();
 			++it)
 	{
 		cout << *it << endl;
 	}
 	cout << "body: " << http->body;
+	*/
+
 	delete http;
 	return 0;
 

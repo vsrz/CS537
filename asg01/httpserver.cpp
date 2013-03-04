@@ -27,6 +27,17 @@ using namespace dateutils;
 const int backlog = 4;
 
 
+/* consists of the different parts of an HTTP request */
+struct HttpRequest
+{
+	string command;
+	string path;
+	string protocol;
+	vector<string> headers;
+	string body;
+
+};
+
 
 // return the position in the string that the needle is found, 0 if not found
 int findInString(string needle, string haystack)
@@ -39,20 +50,27 @@ int findInString(string needle, string haystack)
 
 }
 
-/* consists of the different parts of an HTTP request */
-struct HttpRequest
-{
-	string command;
-	string path;
-	string protocol;
-	vector<string> headers;
-	string body;
-
-};
+/* takes the header list and a header key and returns the value found */
+string getHeaderValue(vector<string> h, string header)
+{	
+	for ( vector<string>::iterator it = h.begin();
+		it != h.end();
+		++it)
+	{
+		string i(*it);
+		if(findInString(header, i) == 1)
+		{
+			i = i.substr(findInString(" ", i),i.size()-1);
+			i.erase(i.find_last_not_of(" \n\r\t")+1);
+			return i;
+		}
+	}
+	return string("");
+}
 
 void responseServerHeader(string &s)
 {
-	s += "Server: CS537_VILLEPOWER/1.0\r\n";
+	s += "Server: CS537_POWVIL/1.0\r\n";
 }
 
 /* Puts the response onto the wire */
@@ -236,32 +254,71 @@ void httpPut(HttpRequest *http, int fd)
 /* handle and respond to an http head request */
 void httpHead(HttpRequest *http, int fd)
 {
+    string request, resp_header(""), resp_body("");
 
+	// Strip the slash off the path
+	if( findInString("/",http->path) == 1 )
+		http->path = http->path.substr( 1,http->path.length() );
+
+	/* default to index.html if none provided */
+    if (http->path == "")
+    	http->path = "index.html";
+    
+	
+	/* If file doesn't exist, display a 404 error */
+	if( fileExists( http->path ) )
+	{
+		responseHttpOk( resp_header, http->protocol );		
+		getLastModifiedRfc2822( resp_header );
+		responseServerHeader( resp_header );
+		readFile(resp_body, http->path);
+		responseContentType( resp_header, http->path );
+		responseContentLength( resp_header, resp_body );
+	}
+	else
+	{
+		responseHttpNotFound( resp_header, http->protocol );
+		http->path = "404.html";
+		responseContentType( resp_header, http->path );
+	}
+	
+	getDateTimeRfc2822(resp_header);
+
+	// Send the content length, but not the actual document
+	sendHttpResponse(resp_header + "\r\n", fd);		
+	
 }
 
 void *clientHandler(void *arg)
 {
 
-    char str[MAXLINE];
+    char str;
     vector<string> cli_buf;
-    int  n;
+    //size_t i = 0;
+	string request;
     bool conn = true;
-    int  fd = *(int*)(arg);
+    int fd = *(int*)(arg);
     cout << "Client accepted" << endl;
 	HttpRequest *http;
+    //bzero(str,MAXLINE);
 
-    while (conn) {
-        bzero(str,MAXLINE); 
-        if ((n = read(fd, str, MAXLINE)) == 0) {
-            close (fd);
-            conn = false;
-	        cout << "Client disconnected.\n";
-    	    return NULL;
-        }
-
+	/* maintain conn */
+	while ( conn )
+	{
+		/* read buffer one line at a time until you get two CRLF's  */
+		for ( 
+			size_t i = 0; 
+			(request.size() >= 4 ? 
+				request.compare(request.size() -4, 4, "\r\n\r\n")  : 1); 
+			i++)
+		{
+			if ( recv( fd, &str, 1, 0) < 1)  break;
+				request.push_back(str);			
+		} // end for
+	
 		/* Send the entire buffer to the read processor
   		   and return a pointer to an http request object */
-		http = parseRequest(str);
+		http = parseRequest(request);
 
 		// Determine the request type and move forward
 		if ( http->command == "GET" )
@@ -275,12 +332,9 @@ void *clientHandler(void *arg)
 		else 
 			httpError(http, fd);
 
-		if ( http->protocol == "HTTP/1.0" )
-		{
+		if ( getHeaderValue( http->headers, "Connection" ) != "keep-alive" )
 			conn = false;
-			close(fd);
-		}
-
+			
 #ifdef DEBUG
 		cout << "command: " << http->command << endl;
 		cout << "path: " << http->path << endl;
@@ -293,27 +347,16 @@ void *clientHandler(void *arg)
 		}
 		cout << "body: " << http->body;
 #endif
-
+		request = "";
 		delete http;
-		/*
-	    cli_buf.clear();
-	    string req(str);
-	    stringstream ss(req);
-	    string item;
-	    while (getline(ss, item, '\n'))
-	    {
-		    cli_buf.push_back(item.substr(0, item.length()-1));
-	    }
 
+	} // end while( conn )
+	cout << "Connection closed" << endl;
+	close(fd);
 
-	    if (cli_buf[0].substr(0, 3) == "GET")
-	    {
-		    httpGet(cli_buf, fd);
-	    }
-		*/
-    }
     return NULL;
 }
+
 
 int main(int argc, char *argv[])
 {
@@ -364,11 +407,10 @@ int main(int argc, char *argv[])
 			}
 		}
 
-	        if (pthread_create(&tid, NULL, clientHandler, (void *)&connfd) != 0) {
-	           fprintf(stderr, "Error unable to create thread, errno = %d (%s) \n",
-	                   errno, strerror(errno));
-	        }
-
+		if (pthread_create(&tid, NULL, clientHandler, (void *)&connfd) != 0) {
+		   fprintf(stderr, "Error unable to create thread, errno = %d (%s) \n",
+				   errno, strerror(errno));
+		}		
 	}
 }
 
