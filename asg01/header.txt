@@ -1,0 +1,13 @@
+404
+
+GET /ckajd.html HTTP/1.1
+Host: www.google.com
+
+HTTP/1.1 404 Not Found
+Content-Type: text/html; charset=UTF-8
+X-Content-Type-Options: nosniff
+Date: Mon, 04 Mar 2013 05:22:21 GMT
+Server: sffe
+Content-Length: 941
+X-XSS-Protection: 1; mode=block
+
