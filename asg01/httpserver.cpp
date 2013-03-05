@@ -19,7 +19,7 @@
 #include "dateutils.h"
 
 #define MAXLINE	32768
-#define DEBUG
+//#define DEBUG
 //#define LOG_CONSOLE
 
 using namespace std;
@@ -50,10 +50,7 @@ static size_t findInString(string needle, string haystack)
 	size_t found = haystack.find(needle, 0);
 
 	if( found != std::string::npos )
-	{
-		cout << "found: " << found << endl;
 		return found;
-	}
 	return -1;
 
 }
@@ -69,8 +66,7 @@ static string getHeaderValue(vector<string> h, string header)
 		string i(*it);
 		if(findInString(header, i) >= 0)
 		{			
-			i = i.substr(findInString(" ", i),i.size());
-			i.erase(i.find_last_not_of("\n\r\t"));
+			i = i.substr(findInString(": ", i)+2,i.size());
 			return i;
 		}
 	}
@@ -353,16 +349,15 @@ string readBuffer(int fd, int sz)
 void httpPut(HttpRequest *http, int fd)
 {
 	size_t psize;
-	string len;
-	istringstream ss( getHeaderValue( http->headers, "Content-Length" ) );
-	
-	len = getHeaderValue( http->headers, "Content-Length" );
-	ss >> psize;	
-	cout << "Psize: " << psize << endl;
+	string str;
 
-	if ( len != "" )
+	str = getHeaderValue( http->headers, "Content-Length" );
+
+	if ( str != "" )
 	{
-
+		istringstream ss(str);
+		ss >> psize;
+		cout << psize << endl;
 	}
 	else
 		httpError(http, fd);
