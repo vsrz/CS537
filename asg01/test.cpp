@@ -89,17 +89,6 @@ string getDateTimeRfc2822()
 	return str;
 }
 
-// return the position in the string that the needle is found, 0 if not found
-int findInString(string needle, string haystack)
-{
-	size_t found;
-	found = haystack.find(needle);
-	if( found != string::npos )
-		return found+1;
-	return 0;
-
-}
-
 string fileEndsWith(string fn)
 {
 	return( fn.substr( fn.find_last_of(".") + 1 ) );
@@ -137,6 +126,16 @@ void line(string s)
 	}
 }
 
+
+// return the position in the string that the needle is found, 0 if not found
+size_t findInString(string needle, string haystack)
+{
+	unsigned found = haystack.find(needle, 0);
+	if( found != string::npos )
+		return ++found;
+	return 0;
+
+}
 
 /* breaks a string object into an http request struct */
 HttpRequest *parseRequest(string s)
@@ -205,14 +204,14 @@ string getHeaderValue(vector<string> h, string header)
 }
 
 
+
 int main()
 {
-	string s = "GET /ajsdkf.html HTTP/1.1\r\nHost: www.csusm.edu\r\nConnection: close\r\nContent-Length: 19\r\n\r\nname=ruturajv&sex=m";
-
+	string s = "PUT /ajsdkf.html HTTP/1.1\r\nHost: www.csusm.edu\r\nConnection: close\r\nContent-Length: 19\r\n\r\nname=ruturajv&sex=m";
+	string s2 = "PUT / HTTP/1.1\r\n\r\n";
 	HttpRequest *http;
-	http = parseRequest(s);
-	string s2 = getHeaderValue(http->headers, "Connection");
-	cout << s2 << endl;
+	http = parseRequest(s2);
+	cout << getHeaderValue(http->headers, "Content-Length") << endl;
 /*	cout << "command: " << http->command << endl;
 	cout << "path: " << http->path << endl;
 	cout << "protocol: " << http->protocol << endl;

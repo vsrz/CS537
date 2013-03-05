@@ -19,6 +19,8 @@
 #include "dateutils.h"
 
 #define MAXLINE	32768
+#define DEBUG
+//#define LOG_CONSOLE
 
 using namespace std;
 using namespace fileutils;
@@ -26,6 +28,9 @@ using namespace dateutils;
 
 const int backlog = 4;
 
+#ifdef LOG_CONSOLE
+static int conn_count = 0;
+#endif
 
 /* consists of the different parts of an HTTP request */
 struct HttpRequest
@@ -40,33 +45,38 @@ struct HttpRequest
 
 
 // return the position in the string that the needle is found, 0 if not found
-int findInString(string needle, string haystack)
+static size_t findInString(string needle, string haystack)
 {
-	size_t found;
-	found = haystack.find(needle);
-	if( found != string::npos )
-		return found+1;
-	return 0;
+	size_t found = haystack.find(needle, 0);
+
+	if( found != std::string::npos )
+	{
+		cout << "found: " << found << endl;
+		return found;
+	}
+	return -1;
 
 }
 
 /* takes the header list and a header key and returns the value found */
-string getHeaderValue(vector<string> h, string header)
+static string getHeaderValue(vector<string> h, string header)
 {	
+
 	for ( vector<string>::iterator it = h.begin();
 		it != h.end();
 		++it)
 	{
 		string i(*it);
-		if(findInString(header, i) == 1)
-		{
-			i = i.substr(findInString(" ", i),i.size()-1);
-			i.erase(i.find_last_not_of(" \n\r\t")+1);
+		if(findInString(header, i) >= 0)
+		{			
+			i = i.substr(findInString(" ", i),i.size());
+			i.erase(i.find_last_not_of("\n\r\t"));
 			return i;
 		}
 	}
 	return string("");
 }
+
 
 void responseServerHeader(string &s)
 {
@@ -188,7 +198,7 @@ void httpGet(HttpRequest *http, int fd)
     string request, resp_header(""), resp_body("");
 
 	// Strip the slash off the path
-	if( findInString("/",http->path) == 1 )
+	if( findInString("/",http->path) == 0 )
 		http->path = http->path.substr( 1,http->path.length() );
 
 	/* default to index.html if none provided */
@@ -263,19 +273,13 @@ HttpRequest *parseRequest(string s)
 	return http;
 }
 
-/* handle and respond to an http put request */
-void httpPut(HttpRequest *http, int fd)
-{
-
-}
-
 /* handle and respond to an http head request */
 void httpHead(HttpRequest *http, int fd)
 {
     string request, resp_header(""), resp_body("");
 
 	// Strip the slash off the path
-	if( findInString("/",http->path) == 1 )
+	if( findInString("/",http->path) == 0 )
 		http->path = http->path.substr( 1,http->path.length() );
 
     if (http->path == "")
@@ -306,38 +310,97 @@ void httpHead(HttpRequest *http, int fd)
 	
 }
 
+/* reads input buffer from the network, terminating on double CRLF */
+string readBuffer(int fd) 
+{
+
+	char str;
+	string request;
+
+	for ( 
+		size_t i = 0; 
+		(request.size() >= 4 ? 
+			request.compare(request.size() -4, 4, "\r\n\r\n")  : 1); 
+		i++)
+	{
+		if ( recv( fd, &str, 1, 0) < 1)  break;
+			request.push_back(str);			
+	} // end for
+	
+	return request;
+
+}
+
+/* reads the input buffer until sz is reached */
+string readBuffer(int fd, int sz)
+{
+	char str;
+	string req;
+
+	for (
+		size_t i = 0;
+		i < (size_t) sz;
+		++i)
+	{
+		if ( recv( fd, &str, 1, 0) < 1)  break;
+			req.push_back(str);		
+	}
+
+	return req;
+}
+
+/* handle and respond to an http put request */
+void httpPut(HttpRequest *http, int fd)
+{
+	size_t psize;
+	string len;
+	istringstream ss( getHeaderValue( http->headers, "Content-Length" ) );
+	
+	len = getHeaderValue( http->headers, "Content-Length" );
+	ss >> psize;	
+	cout << "Psize: " << psize << endl;
+
+	if ( len != "" )
+	{
+
+	}
+	else
+		httpError(http, fd);
+		
+}
+
 void *clientHandler(void *arg)
 {
 
-    char str;
     vector<string> cli_buf;
     //size_t i = 0;
 	string request;
     bool conn = true;
     int fd = *(int*)(arg);
-    cout << "Client accepted" << endl;
+#ifdef LOG_CONSOLE
+    cout << " (" << ++conn_count << ") " << endl;
+#endif
 	HttpRequest *http;
     //bzero(str,MAXLINE);
 
 	/* maintain conn */
 	while ( conn )
 	{
-		/* read buffer one line at a time until you get two CRLF's  */
-		for ( 
-			size_t i = 0; 
-			(request.size() >= 4 ? 
-				request.compare(request.size() -4, 4, "\r\n\r\n")  : 1); 
-			i++)
-		{
-			if ( recv( fd, &str, 1, 0) < 1)  break;
-				request.push_back(str);			
-		} // end for
-	
+		request = readBuffer(fd);
+
 		/* Send the entire buffer to the read processor
   		   and return a pointer to an http request object */
 		http = parseRequest(request);
+#ifdef DEBUG
+		cout << getHeaderValue(http->headers, "Content-Length") << endl;
+		for ( vector<string>::iterator it = http->headers.begin();
+					it != http->headers.end();
+					++it)
+		{
+			cout << *it << endl;
+		}
 
-		// Determine the request type and move forward
+#endif
 		if ( http->method == "GET" )
 			httpGet(http, fd);
 		else if ( http->method == "DELETE" )
@@ -368,7 +431,9 @@ void *clientHandler(void *arg)
 		delete http;
 
 	} // end while( conn )
-	cout << "Connection closed" << endl;
+#ifdef LOG_CONSOLE
+	cout << "Client disconnected (" << --conn_count << ") " << endl;
+#endif
 	close(fd);
 
     return NULL;
@@ -384,6 +449,9 @@ int main(int argc, char *argv[])
 	char bind_addr[] = "144.37.205.10";
 	int bind_port = 7777;
 	struct 	sockaddr_in cliaddr, servaddr;
+#ifdef LOG_CONSOLE
+	char client_ip[16];
+#endif
 
 	listenfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (listenfd == -1)
@@ -415,6 +483,10 @@ int main(int argc, char *argv[])
 
 	while (1) {
 		clilen = sizeof(cliaddr);
+#ifdef LOG_CONSOLE
+		inet_ntop(AF_INET, &cliaddr.sin_addr, client_ip, 16);
+		cout << "Client connected: " << client_ip;
+#endif
 		if ((connfd = accept(listenfd, (struct sockaddr *)&cliaddr, &clilen)) < 0 ) {
 			if (errno == EINTR)
 				continue;
