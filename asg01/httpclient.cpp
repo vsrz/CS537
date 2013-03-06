@@ -6,21 +6,90 @@
 #include <stdlib.h>
 #include <netdb.h>
 #include <string.h>
+#include <vector>
+#include <fstream>
+#include <sstream>
+#include <time.h>
 using namespace std;
 
 int portno, reqType;
 string httpVer = "1";
-string path;
 struct hostent *server;
-string host;
+string host, connection;
+vector<string> references;
 
 void *conn(void *arg);
+static size_t findInString(string needle, string haystack);
+void readSock(int sockfd);
+
+void readSock(int sockfd)
+{
+	char buff[256];
+	bzero(buff, 256);
+	bool inCon = false;
+	int readIn = 0;
+	string token;
+	int conLen;
+	while (read(sockfd, buff, 255) != 0)
+	{
+		string line(buff);
+		
+		stringstream ss(line); //stream for finding content length
+		
+		bool conF = false;
+		while(ss >> token)
+		{
+			if (conF)
+			{
+				istringstream(token) >> conLen;
+				conF = false;
+				break;
+			}
+			if (token == "Content-Length:")
+			{
+				conF = true;
+			}
+		}
+		if (line == "")
+			inCon = true;
+		if (inCon)
+			readIn += sizeof(buff);
+		bzero(buff, 256);
+		if (readIn >= conLen)
+			break;
+	}
+}
+
+timespec diff(timespec start, timespec end)
+{
+	timespec temp;
+	if ((end.tv_nsec-start.tv_nsec)<0) {
+		temp.tv_sec = end.tv_sec-start.tv_sec-1;
+		temp.tv_nsec = 1000000000+end.tv_nsec-start.tv_nsec;
+	} else {
+		temp.tv_sec = end.tv_sec-start.tv_sec;
+		temp.tv_nsec = end.tv_nsec-start.tv_nsec;
+	}
+	return temp;
+}
+
+// return the position in the string that the needle is found, 0 if not found
+static size_t findInString(string needle, string haystack)
+{
+	size_t found = haystack.find(needle, 0);
+
+	if( found != std::string::npos )
+		return found;
+	return -1;
+}
 
 int main(int argc, char *argv[])
 {
 	int mode;
+	string path;
    	int tCount = 1;
 	void *ret;
+	
 	pthread_t tid;
 
 
@@ -41,14 +110,13 @@ int main(int argc, char *argv[])
 	}
 	
 	string url = argv[1];
-	char delim = '/';
+	string delim = "/";
 	size_t found = url.find(delim);
-
+	string url_h = url.substr(0, found);
 	if (found != std::string::npos)
 	{
-		string url_h = url.substr(0, found);
 		server = gethostbyname(url_h.c_str());
-		path = url.substr(found, url.length()-1);
+		path = url.substr(found, url.length());
 		host = url_h;
 	}
 	else
@@ -112,9 +180,15 @@ int main(int argc, char *argv[])
 	{
 		cout << "Enter HTTP version: (0 = HTTP/1.0, 1 = HTTP/1.1): ";
 		cin >> httpVer;
-		if (httpVer == "0" || httpVer == "1")
+		if (httpVer == "0")
 		{
 			vinput = true;
+			connection == "close";
+		}
+		else if (httpVer == "1")
+		{
+			vinput = true;
+			connection = "keep-alive";
 		}
 		else
 		{
@@ -122,11 +196,13 @@ int main(int argc, char *argv[])
 		}
 	}
 	
-
+	timespec start, end;
+	clock_gettime(CLOCK_REALTIME, &start);
 	
+
 	for (int i = 0; i < tCount; i++)
 	{
-		if (pthread_create(&tid, NULL, conn, (void *)&reqType) != 0)
+		if (pthread_create(&tid, NULL, conn, (void *)&path) != 0)
 			cout << "error creating thread" << endl;
 	}
 
@@ -135,20 +211,39 @@ int main(int argc, char *argv[])
 		cout << "error joining thread" << endl;
 		return 0;
 	}
-
-        cout << "\n";
-        return 0;
+	
+	bool mThreads = false;
+	while (!references.empty())
+	{
+		mThreads = true;
+		path = references.back();
+		references.pop_back();
+		if (pthread_create(&tid, NULL, conn, (void *)&path) != 0)
+			cout << "error creating thread" << endl;
+	}
+	if (mThreads)
+	{
+		if (pthread_join(tid, &ret) != 0)
+		{
+			cout << "error joining thread" << endl;
+			return 0;
+		}
+	}
+	
+	clock_gettime(CLOCK_REALTIME, &end);
+    cout << "Runtime: " << diff(start, end).tv_nsec << " nanoseconds, " << diff(start, end).tv_sec << " seconds\n";
+    return 0;
 }
 
 void *conn(void *arg)
 {
-	char * ret = NULL;
-	int reqType = *(int*) (arg);
-        int sockfd, n;
+	char * ret;
+	string path = *(string*) (arg);
+        int sockfd, newsockfd, clilen, n;
         struct sockaddr_in serv_addr;
 
-        char buffer[256];
-
+        char buffer[32768];
+		
 
         sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -175,17 +270,16 @@ void *conn(void *arg)
                 cout << "Error connecting" << endl;
                 return NULL;
         }
-        bzero(buffer, 256);
+        bzero(buffer, 32768);
 
 	string req_str;
 	switch(reqType)
 	{
 		case 1:
-			req_str = "GET "+path+" HTTP/1."+httpVer+"\r\nHost: "+host+"\r\nConnection: keep-alive\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n\r\n";
+			req_str = "GET "+path+" HTTP/1."+httpVer+"\r\nHost: "+host+"\r\nConnection: "+connection+"\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n\r\n";
 			break;
 		case 2:
 			req_str = "HEAD "+path+" HTTP/1."+httpVer+"\r\nHost: "+host+"\r\n\r\n";
-			cout << "req_str is: " << req_str << endl;
 			break;
 		case 3:
 			req_str = "PUT "+path+" HTTP/1."+httpVer+"\r\nHost: "+host+"\r\n\r\n";
@@ -199,22 +293,79 @@ void *conn(void *arg)
         char *req = new char[req_str.size() + 1];
         req[req_str.size()] = 0;
         memcpy(req, req_str.c_str(), req_str.size());
-
         n = write(sockfd, req, strlen(req));
         if (n < 0)
         {
                 cout << "Error writing to socket" << endl;
                 return NULL;
         }
-        bzero(buffer, 256);
-
-
-        while (read(sockfd, buffer, 255) != 0)
+        bzero(buffer, 32768);
+		string token,crlf("\r\n");
+		string refPath = "none";
+		int conLen;
+        while (read(sockfd, buffer, 32767) != 0)
         {
-                fputs(buffer, stdout);
-                bzero(buffer, 256);
-        }
-
+			string line(buffer);
+			string temp;
+			
+			stringstream ssr(line); //stream for finding references
+			stringstream ss(line); //stream for finding content length
+			while (getline(ssr, temp, '\n'))
+			{
+				if (findInString("src", temp) != std::string::npos)
+				{
+					stringstream ssref(temp);
+					getline(ssref, refPath, '\"'); //removes the part of the line before the path
+					getline(ssref, refPath, '\"'); //gets the path
+					references.push_back(refPath);
+				}
+			}
+			
+			cout << "Need to make a reqest for " << refPath << endl;
+			
+			bool conF = false;
+			while(ss >> token)
+			{
+				if (conF)
+				{
+					istringstream(token) >> conLen;
+					conF = false;
+					break;
+				}
+				if (token == "Content-Length:")
+				{
+					conF = true;
+				}
+			}
+					
+			fputs(buffer, stdout);
+			bzero(buffer, 32768);
+			break;
+		}
+		cout << "\n";
+		if (httpVer == "1")
+		{
+			while(!references.empty())
+			{
+				string refPath = references.back();
+				references.pop_back();
+				req_str = "GET /"+refPath+" HTTP/1."+httpVer+"\r\nHost: "+host+"\r\nConnection: "+connection+"\r\nAccept: */*\r\n\r\n";
+				char *req = new char[req_str.size() + 1];
+				req[req_str.size()] = 0;
+				memcpy(req, req_str.c_str(), req_str.size());
+				n = write(sockfd, req, strlen(req));
+				if (n < 0)
+				{
+						cout << "Error writing to socket" << endl;
+						return NULL;
+				}
+				readSock(sockfd);
+				delete req;
+			}
+		}
+		delete req;
 	pthread_exit(ret);
 }
+
+
 

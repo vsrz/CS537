@@ -1,7 +1,7 @@
 
 
 all:
-	g++ -Wall -o httpclient httpclient.cpp -lpthread
+	g++ -Wall -o httpclient httpclient.cpp -lpthread -lrt
 	g++ -Wall -o httpserver httpserver.cpp -lpthread
 
 clean:
