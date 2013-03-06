@@ -94,14 +94,14 @@ void responseHttpOk(string &s, const string protocol)
 /* Send the built in 404 page */
 void responseHttpNotFound(string &s, const string protocol)
 {
-	s += protocol + "404 Not Found\r\n";
+	s += protocol + " 404 Not Found\r\n";
 }
 
 
 /* Send the 400 page */
 void responseHttpBadRequest(string &s, const string protocol)
 {
-	s += protocol + "400 Bad Request\r\n";
+	s += protocol + " 400 Bad Request\r\n";
 }
 
 /* Return HTTP Header "Content-Type" */
@@ -306,6 +306,25 @@ void httpHead(HttpRequest *http, int fd)
 	
 }
 
+/* reads buffer up to the input length */
+string readBody( int fd, int buflength )
+{
+	char str;
+	string body;
+
+	for (
+		size_t i = 0;
+		body.size() < (size_t)buflength;
+		i++)
+	{
+		if ( recv( fd, &str, 1, 0) < 1) break;
+		body.push_back(str);
+	}
+
+	return body;	
+
+
+}
 /* reads input buffer from the network, terminating on double CRLF */
 string readBuffer(int fd) 
 {
@@ -327,37 +346,28 @@ string readBuffer(int fd)
 
 }
 
-/* reads the input buffer until sz is reached */
-string readBuffer(int fd, int sz)
-{
-	char str;
-	string req;
-
-	for (
-		size_t i = 0;
-		i < (size_t) sz;
-		++i)
-	{
-		if ( recv( fd, &str, 1, 0) < 1)  break;
-			req.push_back(str);		
-	}
-
-	return req;
-}
-
 /* handle and respond to an http put request */
 void httpPut(HttpRequest *http, int fd)
 {
 	size_t psize;
-	string str;
+	string str, resp_header("");
+
+        // Strip the slash off the path
+        if( findInString("/",http->path) == 0 )
+                http->path = http->path.substr( 1,http->path.length() );
 
 	str = getHeaderValue( http->headers, "Content-Length" );
 
 	if ( str != "" )
 	{
-		istringstream ss(str);
-		ss >> psize;
-		cout << psize << endl;
+		stringstream (str) >> psize;
+		str = readBody(fd, psize);
+		responseHttpOk(resp_header, http->protocol);	
+		getDateTimeRfc2822(resp_header);
+		if( writeFileToDisk(str, http->path) )		
+			sendHttpResponse(resp_header + "\r\n", fd);		
+		else
+			httpError(http, fd);
 	}
 	else
 		httpError(http, fd);

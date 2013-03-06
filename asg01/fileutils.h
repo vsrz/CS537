@@ -6,6 +6,18 @@ using namespace std;
 namespace fileutils
 {
 
+
+/* write string stream to disk */
+bool writeFileToDisk(string file, string filename)
+{
+        ofstream f;
+        f.open(filename.c_str());
+        f << file;
+        f.close();
+        return true;
+}
+
+
 /* gets the extension of a filename */
 string getFileExtension(string fn)
 {
