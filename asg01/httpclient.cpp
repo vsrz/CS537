@@ -17,46 +17,95 @@ string httpVer = "1";
 struct hostent *server;
 string host, connection;
 vector<string> references;
+bool refCon;
 
 void *conn(void *arg);
 static size_t findInString(string needle, string haystack);
 void readSock(int sockfd);
 
+bool writeFileToDisk(string file, string filename)
+{
+        ofstream f;
+        f.open(filename.c_str());
+        f << file;
+        f.close();
+        return true;
+}
+
+string readBody( int fd, int buflength )
+{
+	char str;
+	string body;
+
+	for (
+		size_t i = 0;
+		body.size() < (size_t)buflength;
+		++i)
+		
+	{
+		if ( recv( fd, &str, 1, 0) < 1) break;
+		body.push_back(str);
+	}
+cout << "here" << endl;
+	return body;	
+
+
+}
+string readBuffer(int fd) 
+{
+
+	char str;
+	string request;
+
+	for ( 
+		size_t i = 0; 
+		(request.size() >= 4 ? 
+			request.compare(request.size() -4, 4, "\r\n\r\n")  : 1); 
+		i++)
+	{
+		if ( recv( fd, &str, 1, 0) < 1)  break;
+			request.push_back(str);			
+	} // end for
+
+	return request;
+
+}
+
+int getConLen(string headers)
+{
+	int conLen;
+	bool conF = false;
+	stringstream ss(headers);
+	string token;
+	while (ss >> token)
+	{
+		if (conF)
+		{
+			istringstream(token) >> conLen;
+			break;
+		}
+		if (token == "Content-Length:")
+		{
+			conF = true;
+		}
+	}
+	return conLen;
+}
+
 void readSock(int sockfd)
 {
-	char buff[256];
-	bzero(buff, 256);
-	bool inCon = false;
+	string headers = readBuffer(sockfd);
+	int conLen = getConLen(headers);
+	char buff[2];
 	int readIn = 0;
-	string token;
-	int conLen;
-	while (read(sockfd, buff, 255) != 0)
+	while (read(sockfd, buff, 1) != 0)
 	{
-		string line(buff);
-		
-		stringstream ss(line); //stream for finding content length
-		
-		bool conF = false;
-		while(ss >> token)
+		readIn++;
+		if (readIn == conLen)
 		{
-			if (conF)
-			{
-				istringstream(token) >> conLen;
-				conF = false;
-				break;
-			}
-			if (token == "Content-Length:")
-			{
-				conF = true;
-			}
-		}
-		if (line == "")
-			inCon = true;
-		if (inCon)
-			readIn += sizeof(buff);
-		bzero(buff, 256);
-		if (readIn >= conLen)
+			cout << "Received all " << conLen << " bytes of file: ";
 			break;
+		}
 	}
 }
 
@@ -85,6 +134,8 @@ static size_t findInString(string needle, string haystack)
 
 int main(int argc, char *argv[])
 {
+	cout << "As of 1:22pm\n";
+	refCon = false;
 	int mode;
 	string path;
    	int tCount = 1;
@@ -92,12 +143,11 @@ int main(int argc, char *argv[])
 	
 	pthread_t tid;
 
-
-        if (argc < 2)
-        {
-                cout << "Usage: %s hostname port" << endl;
-                return 0;
-        }
+	if (argc < 2)
+	{
+			cout << "Usage: %s hostname port" << endl;
+			return 0;
+	}
 
         if (argc == 2)
 	{
@@ -165,7 +215,9 @@ int main(int argc, char *argv[])
 		{
 			cout << "Enter request type (1 = GET, 2 = HEAD, 3 = PUT, 4 = DELETE): ";
 			cin >> reqType;
-			if (reqType == 1 || reqType == 2 || reqType == 3 || reqType == 4)
+			if (reqType == 3)
+				cout << "Sorry, PUT has not yet been implemented. Please try a different request. \n" << endl;
+			if (reqType == 1 || reqType == 2 || reqType == 4)
 			{
 				vinput = true;
 			}
@@ -215,8 +267,9 @@ int main(int argc, char *argv[])
 	bool mThreads = false;
 	while (!references.empty())
 	{
+		refCon = true;
 		mThreads = true;
-		path = references.back();
+		path = "/"+references.back();
 		references.pop_back();
 		if (pthread_create(&tid, NULL, conn, (void *)&path) != 0)
 			cout << "error creating thread" << endl;
@@ -237,12 +290,10 @@ int main(int argc, char *argv[])
 
 void *conn(void *arg)
 {
-	char * ret;
+	char * ret = NULL;
 	string path = *(string*) (arg);
-        int sockfd, newsockfd, clilen, n;
+		int sockfd, n;
         struct sockaddr_in serv_addr;
-
-        char buffer[32768];
 		
 
         sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -270,7 +321,6 @@ void *conn(void *arg)
                 cout << "Error connecting" << endl;
                 return NULL;
         }
-        bzero(buffer, 32768);
 
 	string req_str;
 	switch(reqType)
@@ -288,8 +338,6 @@ void *conn(void *arg)
 			req_str = "DELETE "+path+" HTTP/1."+httpVer+"\r\nHost: "+host+"\r\n\r\n";
 			break;
 	}
-
-
         char *req = new char[req_str.size() + 1];
         req[req_str.size()] = 0;
         memcpy(req, req_str.c_str(), req_str.size());
@@ -299,50 +347,40 @@ void *conn(void *arg)
                 cout << "Error writing to socket" << endl;
                 return NULL;
         }
-        bzero(buffer, 32768);
-		string token,crlf("\r\n");
-		string refPath = "none";
-		int conLen;
-        while (read(sockfd, buffer, 32767) != 0)
-        {
-			string line(buffer);
-			string temp;
-			
-			stringstream ssr(line); //stream for finding references
-			stringstream ss(line); //stream for finding content length
-			while (getline(ssr, temp, '\n'))
-			{
-				if (findInString("src", temp) != std::string::npos)
-				{
-					stringstream ssref(temp);
-					getline(ssref, refPath, '\"'); //removes the part of the line before the path
-					getline(ssref, refPath, '\"'); //gets the path
-					references.push_back(refPath);
-				}
-			}
-			
-			cout << "Need to make a reqest for " << refPath << endl;
-			
-			bool conF = false;
-			while(ss >> token)
-			{
-				if (conF)
-				{
-					istringstream(token) >> conLen;
-					conF = false;
-					break;
-				}
-				if (token == "Content-Length:")
-				{
-					conF = true;
-				}
-			}
-					
-			fputs(buffer, stdout);
-			bzero(buffer, 32768);
-			break;
+		string headers = readBuffer(sockfd);
+		int conLen = getConLen(headers);
+		string content, temp, refPath;
+		char buff[2];
+		int readIn = 0;
+		while (read(sockfd, buff, 1) != 0)
+		{
+			string curr(buff);
+			content += curr;
+			readIn++;
+			if (readIn == conLen)
+				break;
 		}
-		cout << "\n";
+		if(!refCon)
+			cout << content;
+		stringstream ss(content); //stream for finding content length
+		while (getline(ss, temp, '\n'))
+		{
+			if (findInString("src", temp) != std::string::npos)
+			{
+				stringstream ssref(temp);
+				getline(ssref, refPath, '\"'); //removes the part of the line before the path
+				getline(ssref, refPath, '\"'); //gets the path
+				references.push_back(refPath);
+			}
+		}
+		if (!refCon)
+			cout << "Ref path is " << refPath << endl;
+		string truePath;
+		if (path == "/")
+			truePath = "/index.html";
+		else
+			truePath = path;
+		cout << "Received all " << conLen << " bytes of file " << truePath << endl;
 		if (httpVer == "1")
 		{
 			while(!references.empty())
@@ -360,12 +398,12 @@ void *conn(void *arg)
 						return NULL;
 				}
 				readSock(sockfd);
+				cout << refPath << endl;
 				delete req;
 			}
 		}
 		delete req;
 	pthread_exit(ret);
 }
-
 
 
