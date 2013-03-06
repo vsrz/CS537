@@ -30,7 +30,7 @@ string getDateTime()
 	
 	/* hr, min, and sec with leading zero check */
 	ss << (tm->tm_hour < 10 ? "0" : "") << tm->tm_hour << ":";
-	ss << (tm->tm_min < 10 ? "0" : "") << tm->tm_hour << ":";
+	ss << (tm->tm_min < 10 ? "0" : "") << tm->tm_min << ":";
 	ss << (tm->tm_sec < 10 ? "0" : "") << tm->tm_sec;
 	ss << " GMT";
 	s += ss.str();

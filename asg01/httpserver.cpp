@@ -13,20 +13,23 @@
 #include <signal.h>
 #include <vector>
 #include <cctype>
+#include <stdlib.h>
 #include <ctime>
 
 #include "fileutils.h"
 #include "dateutils.h"
 
 #define MAXLINE	32768
+
 //#define DEBUG
-//#define LOG_CONSOLE
+#define LOG_CONSOLE
 
 using namespace std;
 using namespace fileutils;
 using namespace dateutils;
 
 const int backlog = 4;
+const int BIND_PORT = 7777;
 
 #ifdef LOG_CONSOLE
 static int conn_count = 0;
@@ -45,7 +48,7 @@ struct HttpRequest
 
 
 // return the position in the string that the needle is found, 0 if not found
-static size_t findInString(string needle, string haystack)
+static int findInString(string needle, string haystack)
 {
 	size_t found = haystack.find(needle, 0);
 
@@ -55,28 +58,30 @@ static size_t findInString(string needle, string haystack)
 
 }
 
-/* takes the header list and a header key and returns the value found */
-static string getHeaderValue(vector<string> h, string header)
-{	
 
-	for ( vector<string>::iterator it = h.begin();
-		it != h.end();
-		++it)
-	{
-		string i(*it);
-		if(findInString(header, i) >= 0)
-		{			
-			i = i.substr(findInString(": ", i)+2,i.size());
-			return i;
-		}
-	}
-	return string("");
+/* takes the header list and a header key and returns the value found */
+string getHeaderValue(vector<string> h, string header)
+{
+        for ( vector<string>::iterator it = h.begin();
+                it != h.end();
+                ++it)
+        {
+                string &i(*it);
+                if(findInString(header + ": ", i) >= 0)
+                {
+                        i = i.substr(i.find(": ")+2);
+                        return i.substr(0,i.size()-1);
+                }
+        }
+        return string("");
 }
+
+
 
 
 void responseServerHeader(string &s)
 {
-	s += "Server: CS537_POWVIL/1.0\r\n";
+	s += "Server: CS537/1.0\r\n";
 }
 
 /* Puts the response onto the wire */
@@ -171,9 +176,12 @@ void httpDelete(HttpRequest *http, int fd)
 	string request, resp_header(""), resp_body("");
 		
 	// Strip the starting slash off the path
-	if( findInString("/",http->path) == 1 )
-		http->path = http->path.substr( 1,http->path.length() );
+	if( findInString("/",http->path) == 0 )
+		http->path = http->path.substr( 1 );
 
+#ifdef LOG_CONSOLE
+        cout << "DELETE request on: " << http->path << endl;
+#endif
 	if( remove( http->path.c_str() ) == 0 )
 	{
 		responseHttpOk(resp_header, http->protocol);
@@ -198,9 +206,12 @@ void httpGet(HttpRequest *http, int fd)
 		http->path = http->path.substr( 1,http->path.length() );
 
 	/* default to index.html if none provided */
-    if (http->path == "")
-    	http->path = "index.html";
+	if (http->path == "")
+    		http->path = "index.html";
     
+#ifdef LOG_CONSOLE
+		cout << "GET request on: " << http->path << endl;
+#endif
 	
 	/* If file doesn't exist, display a 404 error */
 	if(fileExists(http->path))
@@ -281,6 +292,9 @@ void httpHead(HttpRequest *http, int fd)
     if (http->path == "")
     	http->path = "index.html";
     
+#ifdef LOG_CONSOLE
+		cout << "HEAD request on: " << http->path << endl;
+#endif
 	
 	/* If file doesn't exist, return a 404 error */
 	if( fileExists( http->path ) )
@@ -406,6 +420,7 @@ void *clientHandler(void *arg)
 		}
 
 #endif
+
 		if ( http->method == "GET" )
 			httpGet(http, fd);
 		else if ( http->method == "DELETE" )
@@ -419,6 +434,7 @@ void *clientHandler(void *arg)
 
 		if ( getHeaderValue( http->headers, "Connection" ) != "keep-alive" )
 			conn = false;
+
 			
 #ifdef DEBUG
 		cout << "command: " << http->method << endl;
@@ -452,7 +468,7 @@ int main(int argc, char *argv[])
     pthread_t tid;
 	socklen_t clilen;
 	char bind_addr[] = "144.37.205.10";
-	int bind_port = 7777;
+	int bind_port = BIND_PORT;
 	struct 	sockaddr_in cliaddr, servaddr;
 #ifdef LOG_CONSOLE
 	char client_ip[16];
@@ -469,8 +485,17 @@ int main(int argc, char *argv[])
 	bzero(&servaddr, sizeof(servaddr));
 
 	servaddr.sin_family 	   = AF_INET;
-	servaddr.sin_addr.s_addr   = inet_addr(bind_addr);
-	servaddr.sin_port          = htons(bind_port);
+
+	/* determine if argv passed an IP, if so, use it instead */
+	if( argc > 1 )
+		servaddr.sin_addr.s_addr   = inet_addr(argv[1]);
+	else
+		servaddr.sin_addr.s_addr   = inet_addr(bind_addr);
+
+	if( argc > 2 )
+		servaddr.sin_port          = htons(atoi(argv[2]));
+	else
+		servaddr.sin_port          = htons(bind_port);
 
 	if (bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
         fprintf(stderr, "Error binding to socket, errno = %d (%s) \n",

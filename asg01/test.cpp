@@ -20,6 +20,9 @@
 using namespace std;
 
 const int backlog = 4;
+
+static int findInString(string, string);
+
 /* Read file and return the file in a string 
  * assume it exists
  */
@@ -127,17 +130,6 @@ void line(string s)
 }
 
 
-// return the position in the string that the needle is found, 0 if not found
-size_t findInString(string needle, string haystack)
-{
-	unsigned found = haystack.find(needle, 0);
-	if( found != string::npos )
-		return ++found;
-	return 0;
-
-}
-
-/* breaks a string object into an http request struct */
 HttpRequest *parseRequest(string s)
 {
 	HttpRequest *http = new HttpRequest;
@@ -187,6 +179,16 @@ HttpRequest *parseRequest(string s)
 	return http;
 }
 
+// return the position in the string that the needle is found, 0 if not found
+static int findInString(string needle, string haystack)
+{
+        size_t found = haystack.find(needle, 0);
+        if( found != std::string::npos )
+                return found;
+        return -1;
+
+}
+
 /* takes the header list and a header key and returns the value found */
 string getHeaderValue(vector<string> h, string header)
 {	
@@ -194,10 +196,11 @@ string getHeaderValue(vector<string> h, string header)
 		it != h.end();
 		++it)
 	{
-		string i(*it);
-		if(findInString(header, i) == 1)
+		string &i(*it);
+		if(findInString(header + ": ", i) >= 0)
 		{
-			return i.substr(findInString(" ", i),i.size());
+			i = i.substr(i.find(": ")+2);
+			return i.substr(0,i.size()-1);
 		}
 	}
 	return string("");
@@ -205,26 +208,17 @@ string getHeaderValue(vector<string> h, string header)
 
 
 
-int main()
+int main(int argc, char** argv)
 {
-	string s = "PUT /ajsdkf.html HTTP/1.1\r\nHost: www.csusm.edu\r\nConnection: close\r\nContent-Length: 19\r\n\r\nname=ruturajv&sex=m";
+	string s = "PUT /ajsdkf.html HTTP/1.1\r\nHost: www.csusm.edu\r\nConnection: keep-alive\r\nContent-Length: 19\r\n\r\nname=ruturajv&sex=m";
 	string s2 = "PUT / HTTP/1.1\r\n\r\n";
 	HttpRequest *http;
-	http = parseRequest(s2);
-	cout << getHeaderValue(http->headers, "Content-Length") << endl;
-/*	cout << "command: " << http->command << endl;
-	cout << "path: " << http->path << endl;
-	cout << "protocol: " << http->protocol << endl;
-*/
-/*	for ( vector<string>::iterator it = http->headers.begin();
-			it != http->headers.end();
-			++it)
-	{
-		cout << *it << endl;
-	}
-	cout << "body: " << http->body;
-	*/
-
+	http = parseRequest(s);
+	cout << getHeaderValue(http->headers, "Connection") << endl;
+	if ( getHeaderValue ( http->headers, "Connection" )  == string("keep-alive") )
+		cout << "Keep conn open" << endl;
+	else
+		cout << "Close Conn" << endl;
 	delete http;
 	return 0;
 
