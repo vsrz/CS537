@@ -24,14 +24,14 @@
 #define MAXLINE	32768
 
 //#define DEBUG
-//#define LOG_CONSOLE
+#define LOG_CONSOLE
 
 using namespace std;
 using namespace fileutils;
 using namespace dateutils;
 
 const int backlog = 100;
-const int BIND_PORT = 7790;
+const int BIND_PORT = 7777;
 
 pthread_mutex_t mutex;
 
@@ -420,7 +420,10 @@ void *clientHandler(void *arg) {
 
     } // end while( conn )
 #ifdef LOG_CONSOLE
+    
+    pthread_mutex_lock(&mutex);
     cout << "Client disconnected (" << --conn_count << ") " << endl;
+    pthread_mutex_unlock(&mutex);
 #endif
     close(fd);
 
@@ -486,7 +489,7 @@ int main(int argc, char *argv[]) {
         inet_ntop(AF_INET, &cliaddr.sin_addr, client_ip, 16);
         cout << "Client connected: " << client_ip;
 #endif
-   		pthread_mutex_lock(&mutex);
+   		//pthread_mutex_lock(&mutex);
         if ((connfd = accept(listenfd, (struct sockaddr *) &cliaddr, &clilen)) < 0) {
             if (errno == EINTR)
                 continue;
@@ -500,8 +503,8 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Error unable to create thread, errno = %d (%s) \n",
                     errno, strerror(errno));
         }        
-		pthread_mutex_unlock(&mutex);
-        usleep(100);
+		//pthread_mutex_unlock(&mutex);
+        usleep(1000);
     }
 	pthread_mutex_destroy(&mutex);
 }

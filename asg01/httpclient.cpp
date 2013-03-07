@@ -134,7 +134,6 @@ static size_t findInString(string needle, string haystack)
 
 int main(int argc, char *argv[])
 {
-	cout << "As of 1:22pm\n";
 	refCon = false;
 	int mode;
 	string path;
@@ -405,5 +404,6 @@ void *conn(void *arg)
 		delete req;
 	pthread_exit(ret);
 }
+
 
 
