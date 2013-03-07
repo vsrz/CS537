@@ -15,6 +15,8 @@
 #include <cctype>
 #include <stdlib.h>
 #include <ctime>
+#include <pthread.h>
+#include <semaphore.h>
 
 #include "fileutils.h"
 #include "dateutils.h"
@@ -28,8 +30,10 @@ using namespace std;
 using namespace fileutils;
 using namespace dateutils;
 
-const int backlog = 4;
-const int BIND_PORT = 7777;
+const int backlog = 100;
+const int BIND_PORT = 7790;
+
+pthread_mutex_t mutex;
 
 #ifdef LOG_CONSOLE
 static int conn_count = 0;
@@ -361,6 +365,7 @@ void *clientHandler(void *arg) {
     string request;
     bool conn = true;
     int fd = *(int*) (arg);
+
 #ifdef LOG_CONSOLE
     cout << " (" << ++conn_count << ") " << endl;
 #endif
@@ -428,7 +433,7 @@ int main(int argc, char *argv[]) {
     pthread_t tid;
     socklen_t clilen;
     char bind_addr[] = "144.37.205.10";
-    int bind_port = BIND_PORT;
+    int bind_port = BIND_PORT;	
     struct sockaddr_in cliaddr, servaddr;
 #ifdef LOG_CONSOLE
     char client_ip[16];
@@ -469,6 +474,11 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+	if( pthread_mutex_init(&mutex, NULL) != 0 )
+	{
+		cout << "Mutex init failed." << endl;
+		return 1;
+	}
 
     while (1) {
         clilen = sizeof (cliaddr);
@@ -476,6 +486,7 @@ int main(int argc, char *argv[]) {
         inet_ntop(AF_INET, &cliaddr.sin_addr, client_ip, 16);
         cout << "Client connected: " << client_ip;
 #endif
+   		pthread_mutex_lock(&mutex);
         if ((connfd = accept(listenfd, (struct sockaddr *) &cliaddr, &clilen)) < 0) {
             if (errno == EINTR)
                 continue;
@@ -484,12 +495,14 @@ int main(int argc, char *argv[]) {
                         errno, strerror(errno));
             }
         }
-        
+
         if (pthread_create(&tid, NULL, clientHandler, (void *) &connfd) != 0) {
             fprintf(stderr, "Error unable to create thread, errno = %d (%s) \n",
                     errno, strerror(errno));
         }        
-        usleep(10);
+		pthread_mutex_unlock(&mutex);
+        usleep(100);
     }
+	pthread_mutex_destroy(&mutex);
 }
 
