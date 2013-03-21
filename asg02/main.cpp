@@ -49,9 +49,10 @@ void rdt_send(int fd, char *buf, size_t size)
 int rdt_recv(int fd, char *buf, size_t size)
 {
 	string fileContents;
-	// char *data;
-	int dg_socket;
-	struct sockaddr_in listen_host;
+	char buffer[BUFFER_SIZE];
+	int dg_socket, res;
+	struct sockaddr_in listen_host, remote_host;
+	socklen_t addr_len;
 
 	/* setup listen addr struct */
 	listen_host.sin_family = AF_INET;
@@ -60,7 +61,29 @@ int rdt_recv(int fd, char *buf, size_t size)
 
 	/* bind socket and wait for conn */
 	dg_socket = socket(PF_INET, SOCK_STREAM, 0);
-	bind( dg_socket, (struct sockaddr*) &listen_host, sizeof listen_host);
+	fd = bind( dg_socket, (struct sockaddr*) &listen_host, sizeof listen_host);
+	if( res < 0 )
+	{
+		cout << "could not bind listener\n" << strerror(errno) << "\n";
+		exit(1);
+	}
+
+	/* Remote host information */
+	addr_len = sizeof remote_host;
+
+	/* Wait for receive */
+	res = recvfrom( fd, buffer, BUFFER_SIZE - 1, 0,
+		(struct sockaddr *) &remote_host, &addr_len);
+
+	if( res < 0 )
+	{
+		cout << "error on recvfrom()\n" << strerror(errno) << "\n";
+		exit(1);
+	}
+
+	cout << "Received " << res << " bytes.\n";
+	buffer[res] = '\0';
+	cout << "Data: " << buffer << endl;
 
 	return 0;
 }
@@ -105,7 +128,7 @@ void sendFile(char *fn, char *bind_addr = NULL, int bind_port = DEFAULT_PORT)
 
 void recvFile(char *file)
 {
-
+	rdt_recv(0, NULL, 0);
 
 
 }
