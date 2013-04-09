@@ -1,11 +1,38 @@
 #include <fstream>
 #include <string>
 #include <iostream>
+#include <stdlib.h>
+
 using namespace std;
 
 namespace fileutils
 {
 
+// breaks file into chunks and returns a list of addresses
+char** chunkFile( string file, size_t chunksz )																																																																																																																																						
+{
+	size_t numchunks, current = 0;
+	char** list;
+
+	// determine number of chunks needed to hold the file plus the null terminator
+	numchunks = file.size() / (chunksz + 1);
+	
+	// allocate enough slots to hold memory locations of the chunksz
+	list = (char **) malloc (numchunks * sizeof(char*));
+
+
+	do
+	{		
+		// allocate the memory for this chunk
+		list[current] = (char *) malloc ( chunksz + 1 );	
+
+		strcpy( list[current], file.substr( chunksz * current, chunksz ).c_str() );
+		//cout << current << ": " << strlen(list[current]) << endl;
+	} while( current++ < numchunks );
+
+	return list;
+
+}
 
 /* write string stream to disk */
 bool writeFileToDisk(string file, string filename)
