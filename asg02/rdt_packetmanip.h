@@ -40,7 +40,7 @@ char** chunkFile( string blob, size_t chunksz )
 	do
 	{		
 
-		size_t this_chunksz = (current == numchunks) ? blob.length() % chunksz - 1 : chunksz;
+		size_t this_chunksz = (current == numchunks) ? blob.length() % chunksz : chunksz;
 
 		// allocate the memory for this chunk
 		list[current] = (char *) malloc( this_chunksz );	
