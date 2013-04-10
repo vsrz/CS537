@@ -24,7 +24,7 @@ using namespace std;
 
 #define PAYLOAD_SIZE 4
 
-int main(int argc, char** argv)
+void testPacketChunking()
 {
 	string file;
 	char** chunks;
@@ -38,9 +38,26 @@ int main(int argc, char** argv)
 	
 	std::cout << packet << endl;
 
+
+}
+
+
+void testAsciiCh(  )
+{
+	std::basic_string<unsigned char> s;
+	s = convertInt16ToAscii( 1512 );
+	cout << dec << "hi: " << (int)s[0] << " lo: " << (int)s[1] << endl;
+	
+}
+
+int main(int argc, char** argv)
+{
+	testAsciiCh();
+
 	return 0;
 
 }
+
 
 
 

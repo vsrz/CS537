@@ -55,3 +55,23 @@ char** chunkFile( string blob, size_t chunksz )
 }
 
 
+// converts a 16-bit number to 2 ascii characters
+std::basic_string <unsigned char> convertInt16ToAscii( unsigned int value ) 
+{
+	unsigned int hi, lo;
+	char hich, loch;
+	std::basic_string<unsigned char> stdstr;
+
+	hi = value & 0xFF;
+	value >>= 8;
+	hich = (char)hi;
+	
+	lo = value & 0xFF;
+	loch = (char)lo;
+
+	stdstr = hich;
+	stdstr += loch;
+
+	return stdstr;
+}
+
