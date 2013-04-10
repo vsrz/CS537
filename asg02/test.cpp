@@ -22,7 +22,7 @@
 using namespace fileutils;
 using namespace std;
 
-#define PAYLOAD_SIZE 100
+#define PAYLOAD_SIZE 4
 
 int main(int argc, char** argv)
 {
@@ -32,11 +32,9 @@ int main(int argc, char** argv)
 
 
 	readFile( file, "sample.txt" );
-
 	chunks = chunkFile( file, PAYLOAD_SIZE );
-		
-	std::cout << chunks[0] << endl;
-	packet = createPacket( chunks[0], PAYLOAD_SIZE, "____________", 12 );
+	
+	packet = createPacket( chunks[2], PAYLOAD_SIZE, "____________", 12 );
 	
 	std::cout << packet << endl;
 
