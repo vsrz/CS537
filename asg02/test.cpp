@@ -22,7 +22,17 @@
 using namespace fileutils;
 using namespace std;
 
-#define PAYLOAD_SIZE 4
+#define PAYLOAD_SIZE 50
+
+struct packet {
+	uint16_t cksum; /* Ack and Data */
+	uint16_t len;   /* Ack and Data */
+	uint32_t ackno; /* Ack and Data */
+	uint32_t seqno; /* Data only */
+	char data[PAYLOAD_SIZE]; /* Data only; Not always 500 bytes, can be less */
+};
+
+typedef struct packet packet_t;
 
 void testPacketChunking()
 {
@@ -52,8 +62,33 @@ void testAsciiCh(  )
 
 int main(int argc, char** argv)
 {
-	testAsciiCh();
+	void *payload;
+	const int PACKET_SIZE = sizeof(uint16_t)*4 + PAYLOAD_SIZE;
+	packet p,s;
 
+	// allocate mem
+	payload = malloc(PACKET_SIZE);
+
+	// zero out mem space
+	memset(payload, '0', PACKET_SIZE);
+
+	// setup the packet
+	p.cksum = (uint16_t) 1;
+	p.len = (uint16_t) 2;
+	p.ackno = (uint16_t) 3;
+	p.seqno = (uint16_t) 4;
+	
+
+	char data[] = "asdf";
+	memcpy( p.data, &data, 5);
+	printf("pck: %d\nplen: %d\npackno: %d\npdata: %s\n", (int) p.cksum, (int) p.len, (int) p.ackno, p.data);
+
+	memcpy ( payload, &p, PACKET_SIZE );
+
+	memcpy( &s, payload, PACKET_SIZE );
+
+	printf("sck: %d\nslen: %d\nsackno: %d\nsdata: %s\n", (int) s.cksum, (int) s.len, (int) s.ackno, s.data);
+	
 	return 0;
 
 }
