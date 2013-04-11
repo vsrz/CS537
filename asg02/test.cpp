@@ -63,31 +63,33 @@ void testAsciiCh(  )
 int main(int argc, char** argv)
 {
 	void *payload;
-	const int PACKET_SIZE = sizeof(uint16_t)*4 + PAYLOAD_SIZE;
+	const int PACKET_SIZE = sizeof(uint16_t)*4 + PAYLOAD_SIZE*sizeof(char);
 	packet p,s;
 
 	// allocate mem
 	payload = malloc(PACKET_SIZE);
 
 	// zero out mem space
-	memset(payload, '0', PACKET_SIZE);
+	memset(payload, '\0', PACKET_SIZE);
 
 	// setup the packet
 	p.cksum = (uint16_t) 1;
 	p.len = (uint16_t) 2;
-	p.ackno = (uint16_t) 3;
-	p.seqno = (uint16_t) 4;
-	
+	p.ackno = (uint32_t) 3;
+	p.seqno = (uint32_t) 4;
 
-	char data[] = "asdf";
-	memcpy( p.data, &data, 5);
-	printf("pck: %d\nplen: %d\npackno: %d\npdata: %s\n", (int) p.cksum, (int) p.len, (int) p.ackno, p.data);
+	char data[] = "sample data stuff";	
+	memcpy( p.data, &data, PAYLOAD_SIZE);
+
+	printf("Sender\npck: %d\nplen: %d\npackno: %d\npdata: %s\n\n", (int) p.cksum, (int) p.len, (int) p.ackno, p.data);
 
 	memcpy ( payload, &p, PACKET_SIZE );
 
+	// send payload
+	
 	memcpy( &s, payload, PACKET_SIZE );
 
-	printf("sck: %d\nslen: %d\nsackno: %d\nsdata: %s\n", (int) s.cksum, (int) s.len, (int) s.ackno, s.data);
+	printf("Receiver\nsck: %d\nslen: %d\nsackno: %d\nsdata: %s\n", (int) s.cksum, (int) s.len, (int) s.ackno, s.data);
 	
 	return 0;
 
