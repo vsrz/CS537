@@ -66,16 +66,18 @@ int myrdtlib::rdt_sendto(int socket_descriptor, char *buffer, int buffer_length,
 	uint32_t sqn = 0;
 	int sockfd = socket_descriptor;
 	string file(buffer);
-	int bufLen = buffer_length;
 	int lpSize;
-	Timer timer;
+	Timer retry_t;
 	//struct sockadder_in = destination_address;
 	
 	char** chunks = myrdtlib::PacketChunking(file, lpSize);
+	char *cPacket;
 	bool eof = false;
-	int i = 0;
+	int i = 0, lastPacketLen = 0, fatal_error = 0;
+
 	pkt nextPacket;
-	while (!eof)
+
+	while (!eof && fatal_error < RETRY_ATTEMPTS )
 	{
 		if (chunks[i+1] != NULL)
 		{
@@ -86,25 +88,54 @@ int myrdtlib::rdt_sendto(int socket_descriptor, char *buffer, int buffer_length,
 			nextPacket = genPacket(chunks[i], (buffer_length % 1500), sqn);
 			eof = true;
 		}
-		i++;
 		
-		bool ready = false;
-		while (!ready)
+		
+		// start the wait timer
+		bool ready = false, timeout = false;
+		retry_t.Start();
+
+		while (!ready && !timeout )
 		{
 			//this is what needs to be interrupted after a timeout
 			ready = okToSend(nextPacket.seqno, getLastACK(sockfd));
+			timeout = retry_t.Elapsed() > RETRANS_TIMEOUT;
+			
 		}
 		
-		//if interrupted, send previous pkt
-		char* cPacket = new char[nextPacket.len];
-		memcpy(&nextPacket, &cPacket, nextPacket.len);
+		// if a timeout did not occur, copy the next packet into memory
+		if( !timeout )
+		{
+			// do we need to change the size of the memory chunk?
+			if ( lastPacketLen == nextPacket.len )
+			{
+				delete cPacket;
+				cPacket = new char[nextPacket.len];
+			} else lastPacketLen = nextPacket.len;
+
+			memcpy(&nextPacket, &cPacket, nextPacket.len);
+
+			// shift the iterator and zero out the fatal errors
+			i++;
+			fatal_error = 0;
+
+		} else fatal_error++;
+		
+		// send the packet
 		if (sendto(sockfd, (const void *)cPacket, sizeof(cPacket), 0, (struct sockaddr *)&destination_address, address_length) < 0) 
 		{
 			perror("sendto error");
 			return -1;
 		}
-		delete cPacket;
+
 	}
+
+	// if we got out of the loop because of retries, report the error
+	if ( fatal_error == RETRY_ATTEMPTS )
+	{
+		perror("retransmission error");
+		return -1;
+	}
+	
 	return 0;
 }
 
@@ -149,7 +180,6 @@ uint32_t myrdtlib::getLastACK(int sockfd)
 char** myrdtlib::PacketChunking(string file, int &lpSize)
 {
 	char** chunks;
-	char* pkt;
 
 	lpSize = file.size() % 1512;
 
@@ -249,3 +279,4 @@ char** myrdtlib::chunkData(string blob, size_t chunksz)
 }
 
 #endif //MYRDTLIB_CPP
+

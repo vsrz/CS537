@@ -25,7 +25,15 @@ using namespace std;
 typedef unsigned char      byte;    // Byte is a char
 typedef unsigned short int word16;  // 16-bit word is a short int
 typedef unsigned int       word32;  // 32-bit word is an int
+
+// Size of the data portion of the packet
 #define PAYLOAD_SIZE 1500
+
+// Time to wait between packet retransmissions (ms)
+#define RETRANS_TIMEOUT 5000
+
+// The number of retransmission attempts before generating a fatal error 
+#define RETRY_ATTEMPTS 5
 
 class myrdtlib
 {
