@@ -20,6 +20,8 @@
 #include <ctime>
 #include <stdlib.h>
 #include <vector>
+
+#include "Timer.h"
 #include "myrdtlib.h"
 
 using namespace std;
@@ -66,6 +68,7 @@ int myrdtlib::rdt_sendto(int socket_descriptor, char *buffer, int buffer_length,
 	string file(buffer);
 	int bufLen = buffer_length;
 	int lpSize;
+	Timer timer;
 	//struct sockadder_in = destination_address;
 	
 	char** chunks = myrdtlib::PacketChunking(file, lpSize);
