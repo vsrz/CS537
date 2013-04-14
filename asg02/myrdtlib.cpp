@@ -25,15 +25,6 @@
 #include "myrdtlib.h"
 
 using namespace std;
-/*
-typedef unsigned char      byte;    // Byte is a char
-typedef unsigned short int word16;  // 16-bit word is a short int
-typedef unsigned int       word32;  // 32-bit word is an int
-
-//bool sqn = false;
-
-#define PAYLOAD_SIZE 50
-*/
 
 
 int myrdtlib::rdt_socket(int address_family, int type, int protocol)
@@ -68,9 +59,8 @@ int myrdtlib::rdt_sendto(int socket_descriptor, char *buffer, int buffer_length,
 	string file(buffer);
 	int lpSize;
 	Timer retry_t;
-	//struct sockadder_in = destination_address;
 	
-	char** chunks = myrdtlib::PacketChunking(file, lpSize);
+	char** chunks = PacketChunking(file, lpSize);
 	char *cPacket;
 	bool eof = false;
 	int i = 0, lastPacketLen = 0, fatal_error = 0;
@@ -81,20 +71,19 @@ int myrdtlib::rdt_sendto(int socket_descriptor, char *buffer, int buffer_length,
 	{
 		if (chunks[i+1] != NULL)
 		{
-			nextPacket = genPacket(chunks[i], 1500, sqn);
+			nextPacket = genPacket(chunks[i], DATA_SIZE, sqn);
 		}
 		else
 		{
-			nextPacket = genPacket(chunks[i], (buffer_length % 1500), sqn);
+			nextPacket = genPacket(chunks[i], (buffer_length % DATA_SIZE), sqn);
 			eof = true;
 		}
-		
 		
 		// start the wait timer
 		bool ready = false, timeout = false;
 		retry_t.Start();
 
-		while (!ready && !timeout )
+		while ( !ready && !timeout )
 		{
 			//this is what needs to be interrupted after a timeout
 			ready = okToSend(nextPacket.seqno, getLastACK(sockfd));
@@ -119,7 +108,7 @@ int myrdtlib::rdt_sendto(int socket_descriptor, char *buffer, int buffer_length,
 			fatal_error = 0;
 
 		} else fatal_error++;
-		
+
 		// send the packet
 		if (sendto(sockfd, (const void *)cPacket, sizeof(cPacket), 0, (struct sockaddr *)&destination_address, address_length) < 0) 
 		{
@@ -184,10 +173,7 @@ char** myrdtlib::PacketChunking(string file, int &lpSize)
 	lpSize = file.size() % 1512;
 
 	//readFile( file, "sample.txt" );
-	chunks = chunkData( file, PAYLOAD_SIZE );
-
-	//pkt = createPacket( chunks[2], PAYLOAD_SIZE, "____________", 12 );
-	//std::cout << pkt << endl;
+	chunks = chunkData( file, DATA_SIZE );
 	
 	return chunks;
 }
@@ -199,54 +185,59 @@ myrdtlib::pkt myrdtlib::genPacket(char* chunk, int pSize, uint32_t seqno)
 	pkt nextPacket;
 	nextPacket.len = pSize + 12;
 	nextPacket.seqno = seqno++;
-	nextPacket.ackno = 0;
-	nextPacket.cksum = checksum(nextPacket);
+	nextPacket.ackno = 0;		
+	nextPacket.cksum = packetChecksum(nextPacket);
 	memcpy(nextPacket.data, chunk, pSize);
 	return nextPacket;
 }
 
 uint16_t myrdtlib::getLen()
 {
-	uint16_t len = PAYLOAD_SIZE + 12;
+	uint16_t len = DATA_SIZE + 12;
 	return len;
 }
 
+word16 myrdtlib::checksum( byte *addr, word32 count )
+{
+    register word32 sum = 0;
 
-uint16_t myrdtlib::checksum(pkt p)
+    // Main summing loop
+    while ( count > 1 )
+    {
+        sum = sum + *( ( word16 * ) addr );
+        addr += 2;
+        count = count - 2;
+    	
+	}
+    // Add left-over byte, if any
+    if ( count > 0 )
+    {
+        sum = sum + *( ( byte * ) addr );
+    }
+
+    // Fold 32-bit sum to 16 bits
+    while ( sum >> 16 )
+    {
+        sum = ( sum & 0xFFFF ) + ( sum >> 16 );
+    }
+
+    return( ~sum );
+}
+
+uint16_t myrdtlib::packetChecksum(pkt p)
 {
 	//initialize checksum to 0
 	p.cksum = (uint16_t)0;
 	
-	char *cHeader=new char[12];
-	memcpy(&cHeader, &p.cksum,2);
-	memcpy(&cHeader[2], &p.len, 2);
-	memcpy(&cHeader[4], &p.ackno, 4);
-	memcpy(&cHeader[8], &p.seqno, 4);
+	byte *cHeader = new byte[HEADER_SIZE];
+	memcpy(&cHeader, &p.cksum, sizeof(uint16_t) );
+	memcpy(&cHeader + sizeof(uint16_t), &p.len, sizeof(uint16_t));
+	memcpy(&cHeader + sizeof(uint16_t)*2, &p.ackno, sizeof(uint32_t));
+	memcpy(&cHeader + sizeof(uint32_t) + sizeof(uint16_t)*2 , &p.seqno, sizeof(uint32_t));
 
-	register word32 sum = 0;
-	char *buff = cHeader;
-	char *addr = buff;
-	word32 count = (strlen(buff)-1);
-	while (count > 1)
-	{
-			sum += (word16)*addr;
-			addr++;
-			count = count - 2;
-	}
-	//add leftover byte if there is one
-	if (count > 0)
-	{
-			sum = sum + *((byte *) addr);
-	}
-	//fold to 16 bit number
-	while (sum>>16)
-	{
-			sum = (sum & 0xFFFF) + (sum >> 16);
-	}
-	
+	uint16_t cksum = checksum( (byte*) cHeader, HEADER_SIZE );
 	delete cHeader;
-	uint16_t ckSum(sum);
-	return ckSum;
+	return cksum;
 }
 
 // takes a string (presumably read by a file) and breaks it into chunks

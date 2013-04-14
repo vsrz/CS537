@@ -27,7 +27,10 @@ typedef unsigned short int word16;  // 16-bit word is a short int
 typedef unsigned int       word32;  // 32-bit word is an int
 
 // Size of the data portion of the packet
-#define PAYLOAD_SIZE 1500
+#define DATA_SIZE 1500
+
+// Size of the header portion of the packet (must change if header structure changes!)
+#define HEADER_SIZE 12
 
 // Time to wait between packet retransmissions (ms)
 #define RETRANS_TIMEOUT 5000
@@ -43,13 +46,15 @@ private:
 		uint16_t len;   /* Ack and Data */
 		uint32_t ackno; /* Ack and Data */
 		uint32_t seqno; /* Data only */
-		char data[PAYLOAD_SIZE]; /* Data only; Not always 1500 bytes, can be less */
+		char data[DATA_SIZE]; /* Data only; Not always 1500 bytes, can be less */
 	};
 	typedef struct pkt pkt_t;
 	pkt genPacket(char* chunk, int pSize, uint32_t seqno);
-	uint16_t checksum(pkt p);
+	word16 checksum( byte*, word32 );
+	uint16_t packetChecksum(pkt p);
 	bool okToSend(uint32_t seqno, uint32_t lastACK);
 	pkt readPacket(int sockfd);
+
 	uint32_t getLastACK(int sockfd);
 	uint16_t getLen();
 	char** PacketChunking(string file, int &lpSize);
