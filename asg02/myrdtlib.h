@@ -50,16 +50,16 @@ private:
 	};
 	typedef struct pkt pkt_t;
 	pkt genPacket(char* chunk, int pSize, uint32_t seqno);
-	word16 checksum( byte*, word32 );
+	uint16_t checksum(pkt p);
 	uint16_t packetChecksum(pkt p);
 	bool okToSend(uint32_t seqno, uint32_t lastACK);
 	pkt readPacket(int sockfd);
-
+	int readHeader(char *header);
 	uint32_t getLastACK(int sockfd);
 	uint16_t getLen();
 	char** PacketChunking(string file, int &lpSize);
 	char** chunkData(string blob, size_t chunksz);
-	
+
 public:
 	int rdt_socket(int address_family, int type, int protocol);
 	int rdt_bind(int socket_descriptor, const struct sockaddr *local_address, socklen_t address_length);

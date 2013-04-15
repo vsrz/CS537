@@ -17,7 +17,7 @@
 #include <ctime>
 #include <stdlib.h>
 #include <vector>
-#include "fileutils.h"
+//#include "fileutils.h"
 #include "Timer.h"
 #include "myrdtlib.h"
 
@@ -41,13 +41,13 @@ void TestTimer()
 			t.Stop();
 			cout << "Stopped\n";
 		}
-			
+
 		if(x % 10 == 0 ) 
 		{
 			t.Start();
 			cout << "Restart\n";
 		}
-		
+
 
 	}
 	t.Stop();
@@ -98,7 +98,7 @@ void TestRdt( int argc, char** argv )
 		{
 			exit = true;
 		}
-		
+
 		char *cdata = new char[sdata.size()];
 		cdata[sdata.size()] = 0;
 		memcpy(cdata, sdata.c_str(), sdata.size());
@@ -122,4 +122,3 @@ int main( int argc, char** argv )
 	TestRdt( argc, argv );	
 	return 0;
 }
-

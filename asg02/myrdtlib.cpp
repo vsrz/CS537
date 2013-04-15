@@ -35,14 +35,18 @@ int myrdtlib::rdt_socket(int address_family, int type, int protocol)
 
 int myrdtlib::rdt_bind(int socket_descriptor, const struct sockaddr *local_address, socklen_t address_length)
 {
-	int bindResult = bind(socket_descriptor,(struct sockaddr *)&local_address,address_length);
+	struct sockaddr local_addr = *local_address;
+	int bindResult = bind(socket_descriptor,(struct sockaddr *)&local_addr,address_length);
 	return bindResult;
 }
 
 int myrdtlib::rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *from_address, int *address_length)
 {
 	socklen_t from_length = *address_length;
-	int n = recvfrom(socket_descriptor,buffer,buffer_length,0,(struct sockaddr *)&from_address,&from_length);
+	char tempBuf[1512];
+	int n = recvfrom(socket_descriptor,tempBuf,buffer_length,0,(struct sockaddr *)&from_address,&from_length);
+	int result = readHeader(tempBuf);
+	buffer = tempBuf;
 	return n;
 }
 
@@ -59,9 +63,9 @@ int myrdtlib::rdt_sendto(int socket_descriptor, char *buffer, int buffer_length,
 	string file(buffer);
 	int lpSize;
 	Timer retry_t;
-	
+
 	char** chunks = PacketChunking(file, lpSize);
-	char *cPacket;
+	//char *cPacket;
 	bool eof = false;
 	int i = 0, lastPacketLen = 0, fatal_error = 0;
 
@@ -76,9 +80,10 @@ int myrdtlib::rdt_sendto(int socket_descriptor, char *buffer, int buffer_length,
 		else
 		{
 			nextPacket = genPacket(chunks[i], (buffer_length % DATA_SIZE), sqn);
+			cout << "gen last packet" << endl;
 			eof = true;
 		}
-		
+
 		// start the wait timer
 		bool ready = false, timeout = false;
 		retry_t.Start();
@@ -86,31 +91,47 @@ int myrdtlib::rdt_sendto(int socket_descriptor, char *buffer, int buffer_length,
 		while ( !ready && !timeout )
 		{
 			//this is what needs to be interrupted after a timeout
-			ready = okToSend(nextPacket.seqno, getLastACK(sockfd));
+			if (nextPacket.seqno == 1)
+			{
+				ready = true;
+				cout << "seqno = 1" << endl;
+			}
+			else
+			{
+				ready = okToSend(nextPacket.seqno, getLastACK(sockfd));
+			}
 			timeout = retry_t.Elapsed() > RETRANS_TIMEOUT;
-			
 		}
-		
+
+		cout << "Prepared seqno: " << nextPacket.seqno << endl;
+		cout << "Prepared length: " << nextPacket.len << endl;
+		cout << "Prepared checksum: " << nextPacket.cksum << endl;
+		char cPacket[nextPacket.len];
 		// if a timeout did not occur, copy the next packet into memory
-		if( !timeout )
+		if( timeout )
 		{
 			// do we need to change the size of the memory chunk?
 			if ( lastPacketLen == nextPacket.len )
 			{
-				delete cPacket;
-				cPacket = new char[nextPacket.len];
+				cout << "changing chunk size\n";
+				//delete cPacket;
+				//cPacket = new char[nextPacket.len];
 			} else lastPacketLen = nextPacket.len;
 
-			memcpy(&nextPacket, &cPacket, nextPacket.len);
+			memcpy(&cPacket, &nextPacket, nextPacket.len);
 
 			// shift the iterator and zero out the fatal errors
 			i++;
 			fatal_error = 0;
 
 		} else fatal_error++;
-
 		// send the packet
-		if (sendto(sockfd, (const void *)cPacket, sizeof(cPacket), 0, (struct sockaddr *)&destination_address, address_length) < 0) 
+		memcpy(&cPacket, &nextPacket, nextPacket.len);
+		cout << "Sending seqno: " << nextPacket.seqno << endl;
+		cout << "Sending length: " << nextPacket.len << endl;
+		cout << "Sending checksum: " << nextPacket.cksum << endl;
+		struct sockaddr dest_addr = *destination_address;
+		if (sendto(sockfd, (const void *)cPacket, nextPacket.len, 0, (struct sockaddr *)&dest_addr, address_length) < 0) 
 		{
 			perror("sendto error");
 			return -1;
@@ -124,13 +145,13 @@ int myrdtlib::rdt_sendto(int socket_descriptor, char *buffer, int buffer_length,
 		perror("retransmission error");
 		return -1;
 	}
-	
+
 	return 0;
 }
 
 bool myrdtlib::okToSend(uint32_t seqno, uint32_t lastACK)
 {
-	if (seqno == 1 || seqno == lastACK)
+	if (seqno == lastACK)
 	{
 		return true;
 	}
@@ -147,12 +168,14 @@ myrdtlib::pkt myrdtlib::readPacket(int sockfd)
 	struct sockaddr_in from;
 	char buf[8];
 	memset(buf, 0, 8);
+	cout << "about to recvfrom" << endl;
 	int n = recvfrom(sockfd,buf,8,0,(struct sockaddr *)&from,&fromlen);
 	if (n < 0)
 	{
 		cout << "recvfrom error\n";
 	}
 	memcpy(&buf, &lastPacket, 8);
+	cout << "end readPacket" << endl;
 	return lastPacket;
 }
 
@@ -166,6 +189,18 @@ uint32_t myrdtlib::getLastACK(int sockfd)
 	return lastACK;
 }
 
+int myrdtlib::readHeader(char* header)
+{
+	int result;
+	pkt currPkt;
+	bzero(&currPkt, sizeof(currPkt));
+	memcpy(&currPkt, &header, sizeof(*header));
+	cout << "Received seqno: " << currPkt.seqno << endl;
+	cout << "Received length: " << currPkt.len << endl;
+	cout << "Received checksum: " << currPkt.cksum << endl;
+	return result;
+}
+
 char** myrdtlib::PacketChunking(string file, int &lpSize)
 {
 	char** chunks;
@@ -174,7 +209,7 @@ char** myrdtlib::PacketChunking(string file, int &lpSize)
 
 	//readFile( file, "sample.txt" );
 	chunks = chunkData( file, DATA_SIZE );
-	
+
 	return chunks;
 }
 
@@ -183,10 +218,10 @@ char** myrdtlib::PacketChunking(string file, int &lpSize)
 myrdtlib::pkt myrdtlib::genPacket(char* chunk, int pSize, uint32_t seqno)
 {
 	pkt nextPacket;
-	nextPacket.len = pSize + 12;
-	nextPacket.seqno = seqno++;
+	nextPacket.len = (uint16_t)(pSize + 12);
+	nextPacket.seqno = seqno+1;
 	nextPacket.ackno = 0;		
-	nextPacket.cksum = packetChecksum(nextPacket);
+	nextPacket.cksum = checksum(nextPacket);
 	memcpy(nextPacket.data, chunk, pSize);
 	return nextPacket;
 }
@@ -197,48 +232,58 @@ uint16_t myrdtlib::getLen()
 	return len;
 }
 
-word16 myrdtlib::checksum( byte *addr, word32 count )
-{
-    register word32 sum = 0;
-
-    // Main summing loop
-    while ( count > 1 )
-    {
-        sum = sum + *( ( word16 * ) addr );
-        addr += 2;
-        count = count - 2;
-    	
-	}
-    // Add left-over byte, if any
-    if ( count > 0 )
-    {
-        sum = sum + *( ( byte * ) addr );
-    }
-
-    // Fold 32-bit sum to 16 bits
-    while ( sum >> 16 )
-    {
-        sum = ( sum & 0xFFFF ) + ( sum >> 16 );
-    }
-
-    return( ~sum );
-}
-
-uint16_t myrdtlib::packetChecksum(pkt p)
+uint16_t myrdtlib::checksum(pkt p)
 {
 	//initialize checksum to 0
 	p.cksum = (uint16_t)0;
 	
+	char cHeader[12];
+	memcpy(&cHeader, &p.cksum,2);
+	memcpy(&cHeader[2], &p.len, 2);
+	memcpy(&cHeader[4], &p.ackno, 4);
+	memcpy(&cHeader[8], &p.seqno, 4);
+	register word32 sum = 0;
+	char *addr = cHeader;
+	word32 count = 11;
+	while (count > 1)
+	{
+			sum += (word16)*addr;
+			addr++;
+			count = count - 2;
+	}
+	//add leftover byte if there is one
+	if (count > 0)
+	{
+			sum = sum + *((byte *) addr);
+	}
+	//fold to 16 bit number
+	while (sum>>16)
+	{
+			sum = (sum & 0xFFFF) + (sum >> 16);
+	}
+	
+	uint16_t ckSum(sum);
+	//printf("checksum = %04X \n", ckSum);
+	return ckSum;
+}
+
+/*
+uint16_t myrdtlib::packetChecksum(pkt p)
+{
+	//initialize checksum to 0
+	p.cksum = (uint16_t)0;
+
 	byte *cHeader = new byte[HEADER_SIZE];
 	memcpy(&cHeader, &p.cksum, sizeof(uint16_t) );
 	memcpy(&cHeader + sizeof(uint16_t), &p.len, sizeof(uint16_t));
 	memcpy(&cHeader + sizeof(uint16_t)*2, &p.ackno, sizeof(uint32_t));
 	memcpy(&cHeader + sizeof(uint32_t) + sizeof(uint16_t)*2 , &p.seqno, sizeof(uint32_t));
 
-	uint16_t cksum = checksum( (byte*) cHeader, HEADER_SIZE );
+	//uint16_t cksum = checksum( (byte*) cHeader, HEADER_SIZE );
 	delete cHeader;
-	return cksum;
+	//return cksum;
 }
+*/
 
 // takes a string (presumably read by a file) and breaks it into chunks
 // returns a C-string array
@@ -270,4 +315,3 @@ char** myrdtlib::chunkData(string blob, size_t chunksz)
 }
 
 #endif //MYRDTLIB_CPP
-
