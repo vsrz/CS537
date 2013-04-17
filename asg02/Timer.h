@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <unistd.h>
+#include <cstring>
 #include <sys/time.h>
 
 class Timer
