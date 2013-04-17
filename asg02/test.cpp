@@ -49,8 +49,8 @@ int main( int argc, char **argv )
     //TestTimerFiring();
 	// TestPrintPacket();
 
-    // TestRdtSender( argc, argv );
-    TestRdtReceiver( argc, argv );
+    TestRdtSender( argc, argv );
+    // TestRdtReceiver( argc, argv );
     return 0;
 }
 
@@ -59,8 +59,10 @@ void TestRdtReceiver( int argc, char **argv )
     int recvsock, length, n;
     int fromlen;
     struct sockaddr_in server;
-    struct sockaddr_in from;
-    char buffer[DATA_SIZE];
+    struct sockaddr_in from;    
+    int bufferSize = 1500;
+    char buffer[bufferSize];
+    string data;
 
     if (argc != 3)
     {
@@ -81,18 +83,21 @@ void TestRdtReceiver( int argc, char **argv )
         return;
     }
 
-
-    /* wait for a connection */
-    n = rdt_recv( recvsock, buffer, DATA_SIZE, 0, (struct sockaddr *) &from, &fromlen );
-    if (n < 0)
-    {
-        cout << "recvfrom error\n";
-        return;
-    }
-
-    cout << "Data: " << buffer;
+    int i=0;
+    /* while the eof has not been reached */
+    do
+    {    	
+    	data += buffer;
+    	cout << "It: " << ++i << " Size: " << data.size() << endl;
+    } while ( rdt_recv( recvsock, buffer, bufferSize, 0, (struct sockaddr *) &from, &fromlen ) > 0 );
 
 
+   	cout << "It: " << ++i << " Size: " << data.size() << endl;
+
+    //cout << "Size: " << data.size() << endl << "Data: " << data << endl;
+   	//cout << d<< "Size: " << data.size() << endl;
+    //fileutils::writeFileToDisk(data, "output.txt");
+    
 }
 
 void TestRdtSender( int argc, char **argv )
@@ -131,8 +136,8 @@ void TestRdtSender( int argc, char **argv )
         return;
     }
 
-    delete[] cdata;
-    sleep(1);
+    delete cdata;
+    
 
 }
 

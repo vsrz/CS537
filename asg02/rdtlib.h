@@ -11,6 +11,7 @@
 #include <string>
 #include <fstream>
 #include <cstring>
+#include <algorithm>
 #include <cerrno>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -34,6 +35,9 @@ typedef unsigned char      byte;    // Byte is a char
 typedef unsigned short int word16;  // 16-bit word is a short int
 typedef unsigned int       word32;  // 32-bit word is an int
 
+// Print Sending and receiving debug messages
+//#define PRINT_SEND_RECV
+
 // Time to wait between packet retransmissions (ms)
 #define RETRANS_TIMEOUT 5000
 
@@ -55,7 +59,7 @@ bool timedOut( Timer );
 int rdt_socket(int address_family, int type, int protocol);
 int rdt_bind(int socket_descriptor, const struct sockaddr *local_address, socklen_t address_length);
 int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *destination_address, int address_length);
-int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *from_address, int *address_length);
+int rdt_recv(int socket_descriptor, char **retBuffer, int buffer_length, int flags, struct sockaddr *from_address, int *address_length);
 int close(int fildes);
 void sendPacket( int sockfd, char* packet, int packetSize, struct sockaddr *dest_addr, int addr_len );
 
@@ -82,14 +86,18 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 	bool eof = false;
 	size_t retBufSize = 0;
 
-
-	while( !eof )
+	// Loop until we either get to the end or the return buffer is full
+	while( !eof && retBufSize < buffer_length )
 	{
-			
+
+#ifdef PRINT_SEND_RECV		
+		printf("Waiting to Receive...\n");
+		printf("RetBufSize: %d\nBuffer_length: %d\n", (int)retBufSize, (int)buffer_length );
+#endif
 		// read the packet from the socket
 		if ( recvfrom( 	socket_descriptor, 
 					packetBuffer, 
-					buffer_length + HEADER_SIZE, 0,
+					buffer_length, 0,
 					(struct sockaddr *)&from_address,
 					&from_length ) < 0 )
 		{
@@ -98,14 +106,16 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 
 		/* create a packet out of the received data */
 		pkt *recvPacket = buildPacket( recvPacket, packetBuffer );
-	
-		printf("Receiving packet: \n");
-		printPacket( *recvPacket );
+
+#ifdef PRINT_SEND_RECV		
+		printf("Received %d bytes...\n", (int)recvPacket->len );
+#endif
 
 		/* check if we've reached the end, otherwise process the packet */
 		if( *recvPacket == *nullPacket )
 		{
 			eof = true;
+
 		} else
 		{
 			/* verify checksum the packet */	
@@ -113,10 +123,9 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 			/* build the acknowledgement packet */
 			pkt *ackPacket = buildAcknowledgementPacket( ackPacket, recvPacket->seqno + 1 );
 
-
 			/* send the acknowledgement packet */
 			if (sendto( socket_descriptor, 
-						(const void *) &ackPacket, 
+						(const void *) ackPacket, 
 						HEADER_SIZE, 0, 
 						(struct sockaddr *)&from_address, 
 						from_length) < 0)
@@ -124,17 +133,24 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 				perror("acknowledgement sendto error");
 			}
 
-			/* append the data portion to the return buffer */
-			retBuffer = appendData( recvPacket, retBuffer, retBufSize );
-			printf("Sending acknowledgement packet: \n");
-			printPacket( *ackPacket );
-			
-			retBufSize += recvPacket->len;
+			/* append the data portion to the return buffer, but don't go over the buf */
+			int maxCpySize = min( buffer_length - retBufSize, recvPacket->len - HEADER_SIZE );
+
+			// copy information into the return buffer
+			if( maxCpySize  > 0 ) memcpy( retBuffer + retBufSize, recvPacket->data, maxCpySize );
+			printf("Copied %d bytes\n", maxCpySize);
+			printf("Data: %s\n", retBuffer );
+			retBufSize += maxCpySize;
+						
+			//retBuffer = appendData( recvPacket, retBuffer, retBufSize );
 		}
 		
-	}	
+	}		
 
-	return 0;
+#ifdef PRINT_SEND_RECV		
+		printf("Waiting to Receive...\n");
+#endif	
+	return eof != true;
 }
 
 int close(int fildes)
@@ -147,6 +163,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 {
 	uint32_t seqNumber = 0;
 	int sockfd = socket_descriptor;
+	pkt *nullPacket = buildNullPacket( nullPacket );
 	string file(buffer);
 	int lastPktSize, bufSize = buffer_length, curPktSize, curDataSize;
 	Timer retryTimer;
@@ -159,7 +176,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	int fatal_error = 0;
 
 	pkt curPacket;
-	while (chunks != NULL && fatal_error < RETRY_ATTEMPTS )
+	while (chunks[seqNumber] != NULL && fatal_error < RETRY_ATTEMPTS )
 	{
 		/**
 		 * Create the packet to be sent, if it's the last
@@ -171,9 +188,6 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		// Get the size of the entire packet
 		curPktSize = curDataSize + HEADER_SIZE;
 
-		printf("Sending Packet:\n");
-		printPacket( curPacket );
-		
 		// send the generated packet!
 		if (sendto(sockfd, (const void *) &curPacket, curPktSize, 0, (struct sockaddr *)&dest_addr, address_length) < 0)
 		{
@@ -192,7 +206,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		while ( !okToSend( seqNumber + 1, getLastACK( sockfd )) && 
 			(timeout = !timedOut( retryTimer ) ) );
 		
-		
+
 		/**
 		 * If a timeout did not occur, prepare to send the next packet
 		 * otherwise, send the current packet over again.
@@ -205,20 +219,14 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		else 
 		{
 			// Don't need this chunk anymore
-			delete chunks[seqNumber];
-			
+			//delete chunks[seqNumber];
+
 			// get ready to send the next chunk
 			seqNumber++;
 
 		}
 
-
-
-
 	}
-
-	// Clean up the array
-	delete chunks;
 
 	// if we got out of the loop because of retries, report the error
 	if ( fatal_error == RETRY_ATTEMPTS )
@@ -226,6 +234,13 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		perror("retransmission error, retry limit exceeded");
 		return -1;
 	}
+
+	// now that we're done, send a null packet to indicate the end of service
+	if (sendto(sockfd, (const void *) nullPacket, HEADER_SIZE, 0, (struct sockaddr *)&dest_addr, address_length) < 0)
+	{
+		perror("null packet sendto error");
+	}
+
 
 	return 0;
 }
@@ -251,24 +266,32 @@ void sendPacket( int sockfd, char* packet, int packetSize, struct sockaddr *dest
 
 pkt readPacket(int sockfd)
 {
-	socklen_t fromlen = sizeof( struct sockaddr_in );
 	struct sockaddr_in from;
+	from.sin_family = AF_INET;
+	socklen_t fromlen = sizeof( from ) ;
+	bzero( &from, sizeof ( from ));
+
 	int buflen = HEADER_SIZE;
 	char *buf = new char[buflen];
 
+#ifdef PRINT_SEND_RECV
+	printf("Waiting for response...\n");
+#endif
+
 	if (recvfrom(	sockfd,
 					buf,
-					buflen, 0,
-					(struct sockaddr *) & from
-					,&fromlen) < 0)
+					HEADER_SIZE, 0,
+					(struct sockaddr *) & from,
+					&fromlen ) < 0)
 	{
 		perror("recvfrom error");
 	}
 
+	uint16_t s;
+	memcpy( &s, buf, sizeof(uint16_t));
+
 	pkt *recvPacket = buildPacket( recvPacket, buf );
 
-	printPacket( *recvPacket );
-	cout << "end readPacket" << endl;
 	return *recvPacket;
 }
 
@@ -295,7 +318,7 @@ pkt genPacket(char* chunk, int pSize, uint32_t seqno)
 {
 	pkt nextPacket;
 
-	setPacketSize( &nextPacket, pSize );
+	setPacketSize( &nextPacket, pSize + HEADER_SIZE );
 	setSequenceNumber( &nextPacket, seqno );
 	setAcknowledgementNumber( &nextPacket, 0x00 );
 	setChecksum( &nextPacket );
@@ -335,7 +358,7 @@ char **splitData( const char *data, int dataLength, int &lastPktSize)
 	do
 	{
 		// Size of this chunk is DATA_SIZE, unless its the last element
-		size_t thisChunkSize = (current == numchunks ) ? lastPktSize : DATA_SIZE;
+		size_t thisChunkSize = ( current == numchunks ) ? lastPktSize : DATA_SIZE;
 
 		// Allocate memory for this chunk
 		chunks[current] = (char *) malloc ( thisChunkSize );

@@ -118,7 +118,7 @@ pkt *createPacket( pkt *p, uint32_t ackno, uint32_t seqno, char* data, int dataS
     setAcknowledgementNumber( p, ackno );
     setSequenceNumber( p, seqno );
     memcpy( p->data, data, dataSize );
-    setPacketSize( p, dataSize );
+    setPacketSize( p, dataSize + HEADER_SIZE );
     setChecksum( p );
 
     return p;
@@ -136,7 +136,6 @@ pkt *buildPacket( pkt *p, char *buf )
     memcpy( &p->ackno, buf + sizeof(uint16_t) * 2, sizeof(uint32_t) );
     memcpy( &p->seqno, buf + sizeof(uint16_t) * 2 + sizeof(uint32_t), sizeof(uint32_t) );
     memcpy( p->data, buf + sizeof(uint16_t) * 2 + sizeof(uint32_t) * 2 , p->len ); 
-    printPacket( *p );
     return p;
 
 }
@@ -149,7 +148,7 @@ pkt *buildAcknowledgementPacket( pkt *p, uint32_t ackno )
 {	
     p = new pkt;
     
-    setPacketSize( p, 0 );
+    setPacketSize( p, HEADER_SIZE );
     setAcknowledgementNumber( p, ackno ); 
     return p;
 }
@@ -180,14 +179,14 @@ char* appendData( pkt *p, char* data, size_t dataSize )
 	// Just create a new chunk of memory
 	char *newData = new char[dataSize + p->len];
 
-	// Copy the original blob, as long as the blob isn't empty
-	if( dataSize > 0 ) memcpy( newData, data, dataSize );
+	// Copy the original blob, as long as the blob isn't empty and there's data to copy
+	if( dataSize > 0 && p->len > 0 ) memcpy( newData, data, dataSize );
 
 	// Copy the new data out of the packet
 	memcpy( data + dataSize, p->data, (uint16_t) p->len );
 
 	// Dereference the old data and return the new pointer
-	//delete data;
+	//if ( dataSize > 0 ) delete data;
 	return newData;
 }
 
