@@ -59,7 +59,7 @@ void TestRdtReceiver( int argc, char** argv )
 
 	if (argc != 3)
 	{
-		cout << "Usage: udp_server <address> <port> \n";
+		cout << "Usage: rdt_receiver <address> <port> \n";
 		return;
 	}
 
@@ -77,20 +77,33 @@ void TestRdtReceiver( int argc, char** argv )
 		return;
 	}
 
+	// 
+	string writebuf;
+
 	/* wait for a connection */
 	while (1) 
 	{
+		pkt *recvPacket = new struct pkt;
+		pkt *ackPacket = new struct pkt;
+
 		n = rdt_recv( recvsock, buffer, DATA_SIZE, 0, (struct sockaddr *) &from, &fromlen );
 		if (n < 0)
 		{
 			cout << "recvfrom error\n";
 			return;
 		}
-		string data(buffer);
-		cout << "Received a datagram, size: " << data.size() << ", contents: " << buffer << endl;
 
-		n = rdt_sendto( recvsock, "ACK", 3, 0,(struct sockaddr *) &from, fromlen);
-		if (n  < 0)
+		/* create a packet out of the received data */
+		recvPacket = buildPacket( recvPacket, buffer );
+
+		/* verify checksum the packet */
+
+		/* build the acknowledgement packet */
+		ackPacket = buildAcknowledgementPacket( ackPacket, recvPacket->seqno + 1 );
+
+		/* send the acknowledgement */
+		n = rdt_sendto( recvsock, (char *)ackPacket, HEADER_SIZE, 0,(struct sockaddr *) &from, fromlen);
+		if (n < 0)
 		{
 			cout << "Error sending acknowledgement\n";
 			return;
@@ -107,7 +120,7 @@ void TestRdtSender( int argc, char** argv )
 
 	if (argc != 3) 
 	{
-		printf("Usage: udp_client <address> <port>\n");
+		printf("Usage: rdt_sender <address> <port>\n");
 		exit(-1);
 	}
 
@@ -135,7 +148,7 @@ void TestRdtSender( int argc, char** argv )
 		return;
 	}
 
-	delete cdata;
+	delete[] cdata;
 	sleep(1);
 
 }

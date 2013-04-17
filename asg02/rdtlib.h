@@ -49,7 +49,7 @@ int readHeader(char *header);
 uint32_t getLastACK(int sockfd);
 uint16_t getLen();
 char **splitData( const char * , int , int &);
-bool sendTimeout( Timer );
+bool timedOut( Timer );
 
 
 int rdt_socket(int address_family, int type, int protocol);
@@ -111,7 +111,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		 * packet, set the proper size
 		 **/
 		curPktSize = chunks + 1 == NULL ? lastPktSize : DATA_SIZE;
-		curPacket = genPacket(chunks[i], curPktSize, seqNumber);
+		curPacket = genPacket(chunks[i], curPktSize, seqNumber + 1);
 		
 
 		/* Start the retry timer */
@@ -124,7 +124,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		 *  continue on.
 		 **/
 		while ( !okToSend( seqNumber, getLastACK( sockfd )) && 
-			(timeout = !sendTimeout( retryTimer ) ) );
+			(timeout = !timedOut( retryTimer ) ) );
 		
 		
 		/**
@@ -140,6 +140,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		{
 			// get ready to send the next chunk
 			chunks++;
+			seqNumber++;
 		}
 
 
@@ -164,7 +165,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 }
 
 /* Returns the status of the retry timer */
-bool sendTimeout ( Timer timer )
+bool timedOut ( Timer timer )
 {
 	return timer.Elapsed() > RETRANS_TIMEOUT;
 }
@@ -197,7 +198,7 @@ uint32_t getLastACK(int sockfd)
 	pkt lastPacket = readPacket(sockfd);
 	uint32_t lastACK;
 	char buf[8];
-	memcpy(&lastPacket, &buf, 8); //copy the whole pkt into the buf
+	memcpy(&buf, &lastPacket, 8); //copy the whole pkt into the buf
 	memcpy(&buf[4], &lastACK, 4); //copy just the ACK field into the uint32_t
 	return lastACK;
 }

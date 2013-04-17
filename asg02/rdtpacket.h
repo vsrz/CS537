@@ -28,8 +28,9 @@ typedef unsigned int       word32;  // 32-bit word is an int
 /* function prototypes */
 uint16_t inet_checksum( unsigned char *, uint32_t );
 void setChecksum ( struct pkt * );
-void build_packet ( pkt *, uint16_t , uint16_t , uint16_t , uint32_t , const char* );
+pkt *createPacket( pkt , uint32_t , uint32_t , char * , int );
 void setPacketSize( pkt *, int );
+pkt *buildPacket( pkt *, char * );
 
 uint16_t inet_checksum( unsigned char *addr, uint32_t count )
 {
@@ -103,10 +104,10 @@ void setAcknowledgementNumber( pkt *packet, uint32_t ack )
 }
 
 /** 
- * Builds a packet based on the parameters given
+ * Creates a packet based on the parameters given
  * Generates the length and cksum independently
  **/
-pkt *buildPacket( pkt *p, uint32_t ackno, uint32_t seqno, char* data, int dataSize )
+pkt *createPacket( pkt *p, uint32_t ackno, uint32_t seqno, char* data, int dataSize )
 {
     setAcknowledgementNumber( p, ackno );
     setSequenceNumber( p, seqno );
@@ -115,6 +116,36 @@ pkt *buildPacket( pkt *p, uint32_t ackno, uint32_t seqno, char* data, int dataSi
     setChecksum( p );
 
     return p;
+}
+
+/**
+ * Builds a packet with all the parameters given. Used by the
+ * receiver to fill a new packet with received data
+ **/
+pkt *buildPacket( pkt *p, char *buf )
+{
+    memcpy( &p->cksum, buf, sizeof(uint16_t) );
+    memcpy( &p->len, buf + sizeof(uint16_t), sizeof(uint16_t) );
+    memcpy( &p->ackno, buf + sizeof(uint16_t) * 2, sizeof(uint32_t) );
+    memcpy( &p->seqno, buf + sizeof(uint16_t) * 2 + sizeof(uint32_t), sizeof(uint32_t) );
+    memcpy( p->data, buf + sizeof(uint16_t) * 2 + sizeof(uint32_t) * 2 , p->len ); 
+    return p;
+
+}
+
+/**
+ * Builds an acknowledgement packet
+ **/
+
+pkt *buildAcknowledgementPacket( pkt *p, uint32_t ackno )
+{
+    p = new pkt;
+
+    bzero( &p->cksum, sizeof(uint16_t));
+    memcpy( &p->len, & HEADER_SIZE, sizeof( uint16_t ) );
+    memcpy( &p->ackno, &ackno, sizeof( uint32_t ) );
+    bzero( &p->seqno, sizeof(uint32_t) );
+    bzero( &p->data, DATA_SIZE );
 }
 
 #endif
