@@ -57,6 +57,8 @@ int rdt_bind(int socket_descriptor, const struct sockaddr *local_address, sockle
 int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *destination_address, int address_length);
 int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *from_address, int *address_length);
 int close(int fildes);
+void sendPacket( int sockfd, char* packet, int packetSize, struct sockaddr *dest_addr, int addr_len );
+
 
 /* Functions */
 int rdt_socket(int address_family, int type, int protocol)
@@ -72,14 +74,67 @@ int rdt_bind(int socket_descriptor, const struct sockaddr *local_address, sockle
 	return bindResult;
 }
 
-int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *from_address, int *address_length)
+int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flags, struct sockaddr *from_address, int *address_length)
 {
 	socklen_t from_length = *address_length;
-	char tempBuf[1512];
-	int n = recvfrom(socket_descriptor,tempBuf,buffer_length,0,(struct sockaddr *)&from_address,&from_length);
-	int result = readHeader(tempBuf);
-	buffer = tempBuf;
-	return n;
+	char packetBuffer[HEADER_SIZE + DATA_SIZE];
+	pkt *nullPacket = buildNullPacket( nullPacket );
+	bool eof = false;
+	size_t retBufSize = 0;
+
+
+	while( !eof )
+	{
+			
+		// read the packet from the socket
+		if ( recvfrom( 	socket_descriptor, 
+					packetBuffer, 
+					buffer_length + HEADER_SIZE, 0,
+					(struct sockaddr *)&from_address,
+					&from_length ) < 0 )
+		{
+			perror("Packet recvfrom error");
+		}
+
+		/* create a packet out of the received data */
+		pkt *recvPacket = buildPacket( recvPacket, packetBuffer );
+	
+		printf("Receiving packet: \n");
+		printPacket( *recvPacket );
+
+		/* check if we've reached the end, otherwise process the packet */
+		if( *recvPacket == *nullPacket )
+		{
+			eof = true;
+		} else
+		{
+			/* verify checksum the packet */	
+
+			/* build the acknowledgement packet */
+			pkt *ackPacket = buildAcknowledgementPacket( ackPacket, recvPacket->seqno + 1 );
+
+
+			/* send the acknowledgement packet */
+			if (sendto( socket_descriptor, 
+						(const void *) &ackPacket, 
+						HEADER_SIZE, 0, 
+						(struct sockaddr *)&from_address, 
+						from_length) < 0)
+			{
+				perror("acknowledgement sendto error");
+			}
+
+			/* append the data portion to the return buffer */
+			retBuffer = appendData( recvPacket, retBuffer, retBufSize );
+			printf("Sending acknowledgement packet: \n");
+			printPacket( *ackPacket );
+			
+			retBufSize += recvPacket->len;
+		}
+		
+	}	
+
+	return 0;
 }
 
 int close(int fildes)
@@ -93,26 +148,37 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	uint32_t seqNumber = 0;
 	int sockfd = socket_descriptor;
 	string file(buffer);
-	int lastPktSize, bufSize = buffer_length, curPktSize;
+	int lastPktSize, bufSize = buffer_length, curPktSize, curDataSize;
 	Timer retryTimer;
+	struct sockaddr dest_addr = *destination_address;
 
 	// split data into chunks that are DATA_SIZE large
 	char** chunks = splitData( buffer, bufSize, lastPktSize);
 
 	bool eof = false;
-	int i = 0, fatal_error = 0;
+	int fatal_error = 0;
 
 	pkt curPacket;
-
 	while (chunks != NULL && fatal_error < RETRY_ATTEMPTS )
 	{
 		/**
 		 * Create the packet to be sent, if it's the last
 		 * packet, set the proper size
 		 **/
-		curPktSize = chunks + 1 == NULL ? lastPktSize : DATA_SIZE;
-		curPacket = genPacket(chunks[seqNumber], curPktSize, seqNumber + 1);
+		curDataSize = chunks[seqNumber+1] == NULL ? lastPktSize : DATA_SIZE;
+		curPacket = genPacket(chunks[seqNumber], curDataSize, seqNumber + 1);
 		
+		// Get the size of the entire packet
+		curPktSize = curDataSize + HEADER_SIZE;
+
+		printf("Sending Packet:\n");
+		printPacket( curPacket );
+		
+		// send the generated packet!
+		if (sendto(sockfd, (const void *) &curPacket, curPktSize, 0, (struct sockaddr *)&dest_addr, address_length) < 0)
+		{
+			perror("sento error");
+		}
 
 		/* Start the retry timer */
 		retryTimer.Start();
@@ -123,7 +189,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		 *  hasn't expired, wait. When one of these two conditions is met,
 		 *  continue on.
 		 **/
-		while ( !okToSend( seqNumber, getLastACK( sockfd )) && 
+		while ( !okToSend( seqNumber + 1, getLastACK( sockfd )) && 
 			(timeout = !timedOut( retryTimer ) ) );
 		
 		
@@ -147,13 +213,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		}
 
 
-		// send the current packet
-		struct sockaddr dest_addr = *destination_address;
-		if (sendto(sockfd, (const void *) &curPacket, curPktSize, 0, (struct sockaddr *)&dest_addr, address_length) < 0) 
-		{
-			perror("sendto error");
-			return -1;
-		}
+
 
 	}
 
@@ -181,32 +241,52 @@ bool okToSend(uint32_t seqno, uint32_t lastACK)
 	return seqno+1 == lastACK;
 }
 
+void sendPacket( int sockfd, char* packet, int packetSize, struct sockaddr *dest_addr, int addr_len )
+{	
+	if (sendto(sockfd, (const void *) &packet, packetSize, 0, dest_addr, addr_len < 0) ) 
+	{
+		perror("sendto error");
+	}
+}
+
 pkt readPacket(int sockfd)
 {
-	pkt lastPacket;
-	socklen_t fromlen;
+	socklen_t fromlen = sizeof( struct sockaddr_in );
 	struct sockaddr_in from;
-	char buf[8];
-	memset(buf, 0, 8);
-	cout << "about to recvfrom" << endl;
-	int n = recvfrom(sockfd,buf,8,0,(struct sockaddr *)&from,&fromlen);
-	if (n < 0)
+	int buflen = HEADER_SIZE;
+	char *buf = new char[buflen];
+	//memset(buf, 0, buflen);
+
+		// read the packet from the socket
+		// recvfrom( 	socket_descriptor, 
+		// 			packetBuffer, 
+		// 			buffer_length, 0,
+		// 			(struct sockaddr *)&from_address,
+		// 			&from_length );
+
+		// /* create a packet out of the received data */
+		// pkt *recvPacket = buildPacket( recvPacket, packetBuffer );
+	printf("sockfd: %d", sockfd );
+	if (recvfrom(	sockfd,
+					buf,
+					buflen, 0,
+					(struct sockaddr *) & from
+					,&fromlen) < 0)
 	{
-		cout << "recvfrom error\n";
+		perror("recvfrom error");
 	}
-	memcpy(&buf, &lastPacket, 8);
+
+	pkt *recvPacket = buildPacket( recvPacket, buf );
+
+	printPacket( *recvPacket );
 	cout << "end readPacket" << endl;
-	return lastPacket;
+	return *recvPacket;
 }
 
 uint32_t getLastACK(int sockfd)
 {
-	pkt lastPacket = readPacket(sockfd);
-	uint32_t lastACK;
-	char buf[8];
-	memcpy(&buf, &lastPacket, 8); //copy the whole pkt into the buf
-	memcpy(&lastACK, &buf[4], 4); //copy just the ACK field into the uint32_t
-	return lastACK;
+	pkt lastPacket = readPacket(sockfd);	
+	return lastPacket.ackno;
 }
 
 int readHeader(char* header)
@@ -225,6 +305,7 @@ int readHeader(char* header)
 pkt genPacket(char* chunk, int pSize, uint32_t seqno)
 {
 	pkt nextPacket;
+
 	setPacketSize( &nextPacket, pSize );
 	setSequenceNumber( &nextPacket, seqno );
 	setAcknowledgementNumber( &nextPacket, 0x00 );
@@ -260,7 +341,7 @@ char **splitData( const char *data, int dataLength, int &lastPktSize)
 	numchunks = dataLength / DATA_SIZE;
 
 	// allocate enough slots to hold memory locations of the chunksz
-	chunks = (char **) malloc (numchunks * sizeof( char* ));
+	chunks = (char **) malloc (numchunks * sizeof( char* )) + 1;
 
 	do
 	{
@@ -274,7 +355,10 @@ char **splitData( const char *data, int dataLength, int &lastPktSize)
 		memcpy( chunks[current], data + ( current * thisChunkSize ), thisChunkSize );
 	
 	} while( current++ < numchunks );
-		
+
+	// set the next chunk to NULL
+	chunks[current] = NULL;
+
 	return chunks;
 }
 

@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <iostream>
+
 // Size of the data portion of the packet
 #define DATA_SIZE 1500
 
@@ -32,6 +34,8 @@ pkt *createPacket( pkt , uint32_t , uint32_t , char * , int );
 void setPacketSize( pkt *, int );
 pkt *buildPacket( pkt *, char * );
 pkt *buildAcknowledgementPacket( pkt *, uint32_t  );
+void printPacket( pkt & );
+int operator == ( const pkt &, const pkt &  ) ;
 
 uint16_t inet_checksum( unsigned char *addr, uint32_t count )
 {
@@ -110,10 +114,11 @@ void setAcknowledgementNumber( pkt *packet, uint32_t ack )
  **/
 pkt *createPacket( pkt *p, uint32_t ackno, uint32_t seqno, char* data, int dataSize )
 {
+	p = new pkt;
     setAcknowledgementNumber( p, ackno );
     setSequenceNumber( p, seqno );
     memcpy( p->data, data, dataSize );
-
+    setPacketSize( p, dataSize );
     setChecksum( p );
 
     return p;
@@ -125,11 +130,13 @@ pkt *createPacket( pkt *p, uint32_t ackno, uint32_t seqno, char* data, int dataS
  **/
 pkt *buildPacket( pkt *p, char *buf )
 {
+	p = new pkt;
     memcpy( &p->cksum, buf, sizeof(uint16_t) );
     memcpy( &p->len, buf + sizeof(uint16_t), sizeof(uint16_t) );
     memcpy( &p->ackno, buf + sizeof(uint16_t) * 2, sizeof(uint32_t) );
     memcpy( &p->seqno, buf + sizeof(uint16_t) * 2 + sizeof(uint32_t), sizeof(uint32_t) );
     memcpy( p->data, buf + sizeof(uint16_t) * 2 + sizeof(uint32_t) * 2 , p->len ); 
+    printPacket( *p );
     return p;
 
 }
@@ -139,13 +146,78 @@ pkt *buildPacket( pkt *p, char *buf )
  **/
 
 pkt *buildAcknowledgementPacket( pkt *p, uint32_t ackno )
-{
+{	
     p = new pkt;
-
-    bzero( &p, sizeof(struct pkt) );
-    memcpy( &p->len, & HEADER_SIZE, sizeof( uint16_t ) );
-    memcpy( &p->ackno, &ackno, sizeof( uint32_t ) );
     
+    setPacketSize( p, 0 );
+    setAcknowledgementNumber( p, ackno ); 
+    return p;
+}
+
+/**
+ * Builds a null packet used to indicate the end of a connection
+ **/
+pkt *buildNullPacket( pkt *p )
+{
+	p = new pkt;
+	
+	// Can't figure out why I can't just set everything to zero with one big command
+	bzero( &p->cksum, sizeof	( uint16_t ) );
+	bzero( &p->len, sizeof		( uint16_t ) );
+	bzero( &p->ackno, sizeof	( uint32_t ) );
+	bzero( &p->seqno, sizeof	( uint32_t ) );
+	bzero( &p->data, DATA_SIZE );
+
+	return p;
+}
+
+/**
+ * Given a packet, extract the data portion of the packet and
+ * append it to the data passed in *data
+ **/
+char* appendData( pkt *p, char* data, size_t dataSize )
+{
+	// Just create a new chunk of memory
+	char *newData = new char[dataSize + p->len];
+
+	// Copy the original blob, as long as the blob isn't empty
+	if( dataSize > 0 ) memcpy( newData, data, dataSize );
+
+	// Copy the new data out of the packet
+	memcpy( data + dataSize, p->data, (uint16_t) p->len );
+
+	// Dereference the old data and return the new pointer
+	//delete data;
+	return newData;
+}
+
+void printPacket( pkt &p )
+{
+	char* data = new char[p.len];
+	memcpy( data, p.data, p.len );
+
+	printf("Checksum: %02x\n", p.cksum );
+	printf("Length  : %02x\n", p.len );
+	printf("Ackno   : %02x\n", p.ackno );
+	printf("Seqno   : %02x\n", p.seqno );
+	printf("Data    : %s\n", data );
+}
+
+
+/**
+ * Compares two packets
+ **/
+int operator == ( const pkt &l, const pkt &r  ) 
+{
+	// only compare data if length is equal
+	if( l.len == r.len && l.len > 0 )
+		if( memcmp( l.data, r.data, l.len ) != 0 ) 
+			return 0;
+	
+	return l.cksum == r.cksum 	&&
+			l.len == r.len 		&&
+			l.ackno == r.ackno 	&&
+			l.seqno == r.seqno;
 }
 
 #endif
