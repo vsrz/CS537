@@ -255,18 +255,7 @@ pkt readPacket(int sockfd)
 	struct sockaddr_in from;
 	int buflen = HEADER_SIZE;
 	char *buf = new char[buflen];
-	//memset(buf, 0, buflen);
 
-		// read the packet from the socket
-		// recvfrom( 	socket_descriptor, 
-		// 			packetBuffer, 
-		// 			buffer_length, 0,
-		// 			(struct sockaddr *)&from_address,
-		// 			&from_length );
-
-		// /* create a packet out of the received data */
-		// pkt *recvPacket = buildPacket( recvPacket, packetBuffer );
-	printf("sockfd: %d", sockfd );
 	if (recvfrom(	sockfd,
 					buf,
 					buflen, 0,
