@@ -82,9 +82,11 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 {
 	socklen_t from_length = *address_length;
 	char packetBuffer[HEADER_SIZE + DATA_SIZE];
+	int packetSize = HEADER_SIZE + DATA_SIZE;
 	pkt *nullPacket = buildNullPacket( nullPacket );
 	bool eof = false;
 	size_t retBufSize = 0;
+	bzero( retBuffer, buffer_length );
 
 	// Loop until we either get to the end or the return buffer is full
 	while( !eof && retBufSize < buffer_length )
@@ -97,7 +99,7 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 		// read the packet from the socket
 		if ( recvfrom( 	socket_descriptor, 
 					packetBuffer, 
-					buffer_length, 0,
+					packetSize, 0,
 					(struct sockaddr *)&from_address,
 					&from_length ) < 0 )
 		{
@@ -134,15 +136,14 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 			}
 
 			/* append the data portion to the return buffer, but don't go over the buf */
-			int maxCpySize = min( buffer_length - retBufSize, recvPacket->len - HEADER_SIZE );
+			int maxCpySize = max( buffer_length - retBufSize, recvPacket->len - HEADER_SIZE );
 
 			// copy information into the return buffer
 			if( maxCpySize  > 0 ) memcpy( retBuffer + retBufSize, recvPacket->data, maxCpySize );
-			printf("Copied %d bytes\n", maxCpySize);
-			printf("Data: %s\n", retBuffer );
 			retBufSize += maxCpySize;
 						
-			//retBuffer = appendData( recvPacket, retBuffer, retBufSize );
+			// Zero out the receive buffer
+			bzero( packetBuffer, packetSize );
 		}
 		
 	}		
@@ -352,8 +353,12 @@ char **splitData( const char *data, int dataLength, int &lastPktSize)
 	// the number of elements in the string array
 	numchunks = dataLength / DATA_SIZE;
 
+	// If its uneven, there should be another packet
+	if ( lastPktSize > 0 )
+		numchunks++;
+
 	// allocate enough slots to hold memory locations of the chunksz
-	chunks = (char **) malloc (numchunks * sizeof( char* )) + 1;
+	chunks = (char **) malloc (numchunks * sizeof( char* ));
 
 	do
 	{
@@ -366,7 +371,7 @@ char **splitData( const char *data, int dataLength, int &lastPktSize)
 		// Copy the data into the chunk
 		memcpy( chunks[current], data + ( current * thisChunkSize ), thisChunkSize );
 	
-	} while( current++ < numchunks );
+	} while( ++current < numchunks );
 
 	// set the next chunk to NULL
 	chunks[current] = NULL;

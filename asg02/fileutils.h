@@ -11,8 +11,7 @@ namespace fileutils
 /* write string stream to disk */
 bool writeFileToDisk(string file, string filename)
 {
-    ofstream f;
-    f.open(filename.c_str());
+    ofstream f ( filename.c_str(), ios::out | ios::binary );
     f << file;
     f.close();
     return true;
