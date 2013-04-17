@@ -31,6 +31,7 @@ void setChecksum ( struct pkt * );
 pkt *createPacket( pkt , uint32_t , uint32_t , char * , int );
 void setPacketSize( pkt *, int );
 pkt *buildPacket( pkt *, char * );
+pkt *buildAcknowledgementPacket( pkt *, uint32_t  );
 
 uint16_t inet_checksum( unsigned char *addr, uint32_t count )
 {
@@ -141,11 +142,10 @@ pkt *buildAcknowledgementPacket( pkt *p, uint32_t ackno )
 {
     p = new pkt;
 
-    bzero( &p->cksum, sizeof(uint16_t));
+    bzero( &p, sizeof(struct pkt) );
     memcpy( &p->len, & HEADER_SIZE, sizeof( uint16_t ) );
     memcpy( &p->ackno, &ackno, sizeof( uint32_t ) );
-    bzero( &p->seqno, sizeof(uint32_t) );
-    bzero( &p->data, DATA_SIZE );
+    
 }
 
 #endif

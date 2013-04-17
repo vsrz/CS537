@@ -98,7 +98,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 
 	// split data into chunks that are DATA_SIZE large
 	char** chunks = splitData( buffer, bufSize, lastPktSize);
-	
+
 	bool eof = false;
 	int i = 0, fatal_error = 0;
 
@@ -111,7 +111,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		 * packet, set the proper size
 		 **/
 		curPktSize = chunks + 1 == NULL ? lastPktSize : DATA_SIZE;
-		curPacket = genPacket(chunks[i], curPktSize, seqNumber + 1);
+		curPacket = genPacket(chunks[seqNumber], curPktSize, seqNumber + 1);
 		
 
 		/* Start the retry timer */
@@ -138,9 +138,12 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		} 
 		else 
 		{
+			// Don't need this chunk anymore
+			delete chunks[seqNumber];
+			
 			// get ready to send the next chunk
-			chunks++;
 			seqNumber++;
+
 		}
 
 
@@ -153,6 +156,9 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		}
 
 	}
+
+	// Clean up the array
+	delete chunks;
 
 	// if we got out of the loop because of retries, report the error
 	if ( fatal_error == RETRY_ATTEMPTS )
@@ -172,7 +178,7 @@ bool timedOut ( Timer timer )
 
 bool okToSend(uint32_t seqno, uint32_t lastACK)
 {
-	return seqno == lastACK;
+	return seqno+1 == lastACK;
 }
 
 pkt readPacket(int sockfd)
@@ -199,7 +205,7 @@ uint32_t getLastACK(int sockfd)
 	uint32_t lastACK;
 	char buf[8];
 	memcpy(&buf, &lastPacket, 8); //copy the whole pkt into the buf
-	memcpy(&buf[4], &lastACK, 4); //copy just the ACK field into the uint32_t
+	memcpy(&lastACK, &buf[4], 4); //copy just the ACK field into the uint32_t
 	return lastACK;
 }
 
