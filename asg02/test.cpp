@@ -49,8 +49,8 @@ int main( int argc, char **argv )
     //TestTimerFiring();
 	// TestPrintPacket();
 
-   TestRdtSender( argc, argv );
-   // TestRdtReceiver( argc, argv );
+   // TestRdtSender( argc, argv );
+   TestRdtReceiver( argc, argv );
     return 0;
 }
 
@@ -88,13 +88,15 @@ void TestRdtReceiver( int argc, char **argv )
     while ( rdt_recv( recvsock, buffer, bufferSize, 0, (struct sockaddr *) &from, &fromlen ) > 0 )
     {    	
     	data += buffer;
+        cout << ++i << endl;
+        bzero(buffer, bufferSize);
         //cout << "Size: " <<  data.size() << endl;
     } 
-    data += buffer;
+    //data += buffer;
    
     cout << data << endl; 
     // Grab the last piece of the buffer
-    //fileutils::writeFileToDisk(data, "output.txt");
+    fileutils::writeFileToDisk(data, "output.txt");
     
 }
 

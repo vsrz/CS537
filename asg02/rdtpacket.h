@@ -32,8 +32,8 @@ uint16_t inet_checksum( unsigned char *, uint32_t );
 void setChecksum ( struct pkt * );
 pkt *createPacket( pkt , uint32_t , uint32_t , char * , int );
 void setPacketSize( pkt *, int );
-pkt *buildPacket( pkt *, char * );
-pkt *buildAcknowledgementPacket( pkt *, uint32_t  );
+pkt buildPacket( char * );
+pkt buildAcknowledgementPacket( uint32_t  );
 void printPacket( pkt & );
 int operator == ( const pkt &, const pkt &  ) ;
 
@@ -128,14 +128,14 @@ pkt *createPacket( pkt *p, uint32_t ackno, uint32_t seqno, char* data, int dataS
  * Builds a packet with all the parameters given. Used by the
  * receiver to fill a new packet with received data
  **/
-pkt *buildPacket( pkt *p, char *buf )
+pkt buildPacket( char *buf )
 {
-	p = new pkt;
-    memcpy( &p->cksum, buf, sizeof(uint16_t) );
-    memcpy( &p->len, buf + sizeof(uint16_t), sizeof(uint16_t) );
-    memcpy( &p->ackno, buf + sizeof(uint16_t) * 2, sizeof(uint32_t) );
-    memcpy( &p->seqno, buf + sizeof(uint16_t) * 2 + sizeof(uint32_t), sizeof(uint32_t) );
-    memcpy( p->data, buf + sizeof(uint16_t) * 2 + sizeof(uint32_t) * 2 , p->len ); 
+	pkt p;
+    memcpy( &p.cksum, buf, sizeof(uint16_t) );
+    memcpy( &p.len, buf + sizeof(uint16_t), sizeof(uint16_t) );
+    memcpy( &p.ackno, buf + sizeof(uint16_t) * 2, sizeof(uint32_t) );
+    memcpy( &p.seqno, buf + sizeof(uint16_t) * 2 + sizeof(uint32_t), sizeof(uint32_t) );
+    memcpy( p.data, buf + sizeof(uint16_t) * 2 + sizeof(uint32_t) * 2 , p.len ); 
     return p;
 
 }
@@ -144,28 +144,28 @@ pkt *buildPacket( pkt *p, char *buf )
  * Builds an acknowledgement packet
  **/
 
-pkt *buildAcknowledgementPacket( pkt *p, uint32_t ackno )
+pkt buildAcknowledgementPacket( uint32_t ackno )
 {	
-    p = new pkt;
+    pkt p;
     
-    setPacketSize( p, HEADER_SIZE );
-    setAcknowledgementNumber( p, ackno ); 
+    setPacketSize( &p, HEADER_SIZE );
+    setAcknowledgementNumber( &p, ackno ); 
     return p;
 }
 
 /**
  * Builds a null packet used to indicate the end of a connection
  **/
-pkt *buildNullPacket( pkt *p )
+pkt buildNullPacket( )
 {
-	p = new pkt;
+	pkt p;
 	
 	// Can't figure out why I can't just set everything to zero with one big command
-	bzero( &p->cksum, sizeof	( uint16_t ) );
-	bzero( &p->len, sizeof		( uint16_t ) );
-	bzero( &p->ackno, sizeof	( uint32_t ) );
-	bzero( &p->seqno, sizeof	( uint32_t ) );
-	bzero( &p->data, DATA_SIZE );
+	bzero( &p.cksum, sizeof	( uint16_t ) );
+	bzero( &p.len, sizeof		( uint16_t ) );
+	bzero( &p.ackno, sizeof	( uint32_t ) );
+	bzero( &p.seqno, sizeof	( uint32_t ) );
+	bzero( &p.data, DATA_SIZE );
 
 	return p;
 }

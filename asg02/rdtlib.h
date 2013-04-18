@@ -83,18 +83,26 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 	socklen_t from_length = *address_length;
 	char packetBuffer[HEADER_SIZE + DATA_SIZE];
 	int packetSize = HEADER_SIZE + DATA_SIZE;
-	pkt *nullPacket = buildNullPacket( nullPacket );
+	pkt recvPacket;
+	pkt nullPacket = buildNullPacket( );
+	pkt ackPacket = buildAcknowledgementPacket( 0 );
 	bool eof = false;
 	size_t retBufSize = 0;
 	bzero( retBuffer, buffer_length );
+
+	
 
 	// Loop until we either get to the end or the return buffer is full
 	while( !eof && retBufSize < buffer_length )
 	{
 
-#ifdef PRINT_SEND_RECV		
-		printf("Waiting for packet...");		
-#endif
+		#ifdef PRINT_SEND_RECV		
+			printf("Waiting for packet...");		
+		#endif
+
+		// Zero out the receive buffer
+		bzero( packetBuffer, packetSize );
+
 		// read the packet from the socket
 		if ( recvfrom( 	socket_descriptor, 
 					packetBuffer, 
@@ -106,16 +114,16 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 		}
 
 		/* create a packet out of the received data */
-		pkt *recvPacket = buildPacket( recvPacket, packetBuffer );
+		recvPacket = buildPacket( packetBuffer );
 
-#ifdef PRINT_SEND_RECV		
-		printf(" got %d bytes\n", (int)recvPacket->len );
-		printPacketStats(*recvPacket);
-		if( (int)recvPacket->len == 0 ) printf("End of data\n");
-#endif
+		#ifdef PRINT_SEND_RECV		
+			printf(" got %d bytes\n", (int)recvPacket.len );
+			printPacketStats(recvPacket);
+			if( (int)recvPacket.len == 0 ) printf("End of data\n");
+		#endif
 
 		/* check if we've reached the end, otherwise process the packet */
-		if( *recvPacket == *nullPacket )
+		if( recvPacket == nullPacket )
 		{
 			eof = true;
 
@@ -124,11 +132,11 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 			/* verify checksum the packet */	
 
 			/* build the acknowledgement packet */
-			pkt *ackPacket = buildAcknowledgementPacket( ackPacket, recvPacket->seqno + 1 );
+			ackPacket.ackno = recvPacket.seqno + 1;
 
 			/* send the acknowledgement packet */
 			if (sendto( socket_descriptor, 
-						(const void *) ackPacket, 
+						(const void *) &ackPacket, 
 						HEADER_SIZE, 0, 
 						(struct sockaddr *)&from_address, 
 						from_length) < 0)
@@ -137,14 +145,12 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 			}
 
 			/* append the data portion to the return buffer, but don't go over the buf */
-			int maxCpySize = max( buffer_length - retBufSize, recvPacket->len - HEADER_SIZE );
-
+			int maxCpySize = max( buffer_length - retBufSize, recvPacket.len - HEADER_SIZE );
+			
 			// copy information into the return buffer
-			if( maxCpySize  > 0 ) memcpy( retBuffer + retBufSize, recvPacket->data, maxCpySize );
+			if( maxCpySize  > 0 ) memcpy( retBuffer + retBufSize, recvPacket.data, maxCpySize );
 			retBufSize += maxCpySize;
 						
-			// Zero out the receive buffer
-			bzero( packetBuffer, packetSize );
 		}
 		
 	}		
@@ -162,7 +168,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 {
 	uint32_t seqNumber = 0;
 	int sockfd = socket_descriptor;
-	pkt *nullPacket = buildNullPacket( nullPacket );
+	pkt nullPacket = buildNullPacket( );
 	string file(buffer);
 	int lastPktSize, bufSize = buffer_length, curPktSize, curDataSize;
 	Timer retryTimer;
@@ -243,14 +249,14 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	}
 
 	// now that we're done, send a null packet to indicate the end of service
-	if (sendto(sockfd, (const void *) nullPacket, HEADER_SIZE, 0, (struct sockaddr *)&dest_addr, address_length) < 0)
+	if (sendto(sockfd, (const void *) &nullPacket, HEADER_SIZE, 0, (struct sockaddr *)&dest_addr, address_length) < 0)
 	{
 		perror("null packet sendto error");
 	}
 
 	#ifdef PRINT_SEND_RECV
 		printf("Sending null packet... Sent %d bytes\n", (int)HEADER_SIZE );
-		printPacketStats( *nullPacket );
+		printPacketStats( nullPacket );
 	#endif
 
 	return 0;
@@ -279,6 +285,7 @@ pkt readPacket(int sockfd)
 {
 	struct sockaddr_in from;
 	from.sin_family = AF_INET;
+	pkt recvPacket;
 	socklen_t fromlen = sizeof( from ) ;
 	bzero( &from, sizeof ( from ));
 
@@ -301,9 +308,9 @@ pkt readPacket(int sockfd)
 	uint16_t s;
 	memcpy( &s, buf, sizeof(uint16_t));
 
-	pkt *recvPacket = buildPacket( recvPacket, buf );
+	recvPacket = buildPacket( buf );
 
-	return *recvPacket;
+	return recvPacket;
 }
 
 uint32_t getLastACK(int sockfd)
