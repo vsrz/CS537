@@ -36,7 +36,7 @@ typedef unsigned short int word16;  // 16-bit word is a short int
 typedef unsigned int       word32;  // 32-bit word is an int
 
 // Print Sending and receiving debug messages
-//#define PRINT_SEND_RECV
+#define PRINT_SEND_RECV
 
 // Time to wait between packet retransmissions (ms)
 #define RETRANS_TIMEOUT 5000
@@ -93,8 +93,7 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 	{
 
 #ifdef PRINT_SEND_RECV		
-		printf("Waiting to Receive...\n");
-		printf("RetBufSize: %d\nBuffer_length: %d\n", (int)retBufSize, (int)buffer_length );
+		printf("Waiting for packet...");		
 #endif
 		// read the packet from the socket
 		if ( recvfrom( 	socket_descriptor, 
@@ -110,7 +109,8 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 		pkt *recvPacket = buildPacket( recvPacket, packetBuffer );
 
 #ifdef PRINT_SEND_RECV		
-		printf("Received %d bytes...\n", (int)recvPacket->len );
+		printf(" got %d bytes\n", (int)recvPacket->len );
+		if( (int)recvPacket->len == 0 ) printf("End of data\n");
 #endif
 
 		/* check if we've reached the end, otherwise process the packet */
@@ -148,9 +148,6 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 		
 	}		
 
-#ifdef PRINT_SEND_RECV		
-		printf("Waiting to Receive...\n");
-#endif	
 	return eof != true;
 }
 
@@ -190,11 +187,16 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		curPktSize = curDataSize + HEADER_SIZE;
 
 		// send the generated packet!
+		#ifdef PRINT_SEND_RECV		
+			printf("Sending for packet...");
+		#endif	
 		if (sendto(sockfd, (const void *) &curPacket, curPktSize, 0, (struct sockaddr *)&dest_addr, address_length) < 0)
 		{
 			perror("sento error");
 		}
-
+		#ifdef PRINT_SEND_RECV		
+			printf("Sent %d bytes.\n", curPktSize);			
+		#endif	
 		/* Start the retry timer */
 		retryTimer.Start();
 		bool timeout = false;
@@ -207,7 +209,9 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		while ( !okToSend( seqNumber + 1, getLastACK( sockfd )) && 
 			(timeout = !timedOut( retryTimer ) ) );
 		
-
+		#ifdef PRINT_SEND_RECV
+			printf("Got ACK\n");
+		#endif
 		/**
 		 * If a timeout did not occur, prepare to send the next packet
 		 * otherwise, send the current packet over again.
@@ -275,9 +279,9 @@ pkt readPacket(int sockfd)
 	int buflen = HEADER_SIZE;
 	char *buf = new char[buflen];
 
-#ifdef PRINT_SEND_RECV
-	printf("Waiting for response...\n");
-#endif
+	#ifdef PRINT_SEND_RECV
+		printf("Waiting for ACK...");
+	#endif
 
 	if (recvfrom(	sockfd,
 					buf,
@@ -349,12 +353,13 @@ char **splitData( const char *data, int dataLength, int &lastPktSize)
 	char** chunks;
 	size_t numchunks, current = 0;
 	lastPktSize = dataLength % DATA_SIZE;
+	if( lastPktSize == 0 ) lastPktSize = DATA_SIZE;
 
 	// the number of elements in the string array
 	numchunks = dataLength / DATA_SIZE;
 
 	// If its uneven, there should be another packet
-	if ( lastPktSize > 0 )
+	if ( lastPktSize != DATA_SIZE )
 		numchunks++;
 
 	// allocate enough slots to hold memory locations of the chunksz

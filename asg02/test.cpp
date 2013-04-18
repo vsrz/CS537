@@ -49,8 +49,8 @@ int main( int argc, char **argv )
     //TestTimerFiring();
 	// TestPrintPacket();
 
-    // TestRdtSender( argc, argv );
-    TestRdtReceiver( argc, argv );
+    TestRdtSender( argc, argv );
+    // TestRdtReceiver( argc, argv );
     return 0;
 }
 
@@ -91,6 +91,9 @@ void TestRdtReceiver( int argc, char **argv )
    	    cout << "Size: " <<  data.size() << endl;
    	    
     } 
+    data += buffer;
+    cout << data << endl;
+    
     // Grab the last piece of the buffer
     //fileutils::writeFileToDisk(data, "output.txt");
     
