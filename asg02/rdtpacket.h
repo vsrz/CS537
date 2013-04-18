@@ -149,7 +149,9 @@ pkt buildAcknowledgementPacket( uint32_t ackno )
     pkt p;
     
     setPacketSize( &p, HEADER_SIZE );
-    setAcknowledgementNumber( &p, ackno ); 
+    setAcknowledgementNumber( &p, ackno );
+    p.cksum = 0;
+    p.seqno = 0;
     return p;
 }
 
@@ -162,7 +164,7 @@ pkt buildNullPacket( )
 	
 	// Can't figure out why I can't just set everything to zero with one big command
 	bzero( &p.cksum, sizeof	( uint16_t ) );
-	bzero( &p.len, sizeof		( uint16_t ) );
+	bzero( &p.len, sizeof	( uint16_t ) );
 	bzero( &p.ackno, sizeof	( uint32_t ) );
 	bzero( &p.seqno, sizeof	( uint32_t ) );
 	bzero( &p.data, DATA_SIZE );

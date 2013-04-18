@@ -49,8 +49,8 @@ int main( int argc, char **argv )
     //TestTimerFiring();
 	// TestPrintPacket();
 
-   // TestRdtSender( argc, argv );
-   TestRdtReceiver( argc, argv );
+   TestRdtSender( argc, argv );
+   // TestRdtReceiver( argc, argv );
     return 0;
 }
 
@@ -88,11 +88,8 @@ void TestRdtReceiver( int argc, char **argv )
     while ( rdt_recv( recvsock, buffer, bufferSize, 0, (struct sockaddr *) &from, &fromlen ) > 0 )
     {    	
     	data += buffer;
-        cout << ++i << endl;
         bzero(buffer, bufferSize);
-        //cout << "Size: " <<  data.size() << endl;
     } 
-    //data += buffer;
    
     cout << data << endl; 
     // Grab the last piece of the buffer
@@ -106,9 +103,9 @@ void TestRdtSender( int argc, char **argv )
     int     sockfd;
     int     servlen;
 
-    if (argc != 3)
+    if (argc != 4)
     {
-        printf("Usage: rdt_sender <address> <port>\n");
+        printf("Usage: rdt_sender <address> <port> <filename>\n");
         exit(-1);
     }
 
@@ -121,23 +118,14 @@ void TestRdtSender( int argc, char **argv )
 
     /* load the sample data file for sending */
     string filedata;
-    fileutils::readFile( filedata, "sample.txt" );
+    fileutils::readFile( filedata, argv[3] );
 
-    // allocate a chunk of memory to put the data blob into
-    char *cdata = new char[filedata.size()];
-
-    // copy the memory into the newly created block
-    memcpy(cdata, filedata.c_str(), filedata.size());
-
-    // attempt to send the data
-    if (rdt_sendto(sockfd, (char *)cdata, filedata.size(), 0, (struct sockaddr *)&servaddr, servlen) < 0)
+    // send the data
+    if (rdt_sendto(sockfd, (char *)filedata.c_str(), filedata.size(), 0, (struct sockaddr *)&servaddr, servlen) < 0)
     {
         perror("sendto error");
         return;
-    }
-
-    delete cdata;
-    
+    }      
 
 }
 

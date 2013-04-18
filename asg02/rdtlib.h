@@ -146,7 +146,7 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 
 			/* append the data portion to the return buffer, but don't go over the buf */
 			int maxCpySize = max( buffer_length - retBufSize, recvPacket.len - HEADER_SIZE );
-			
+
 			// copy information into the return buffer
 			if( maxCpySize  > 0 ) memcpy( retBuffer + retBufSize, recvPacket.data, maxCpySize );
 			retBufSize += maxCpySize;
@@ -258,6 +258,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		printf("Sending null packet... Sent %d bytes\n", (int)HEADER_SIZE );
 		printPacketStats( nullPacket );
 	#endif
+
 
 	return 0;
 }
