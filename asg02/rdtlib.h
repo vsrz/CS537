@@ -110,6 +110,7 @@ int rdt_recv(int socket_descriptor, char *retBuffer, int buffer_length, int flag
 
 #ifdef PRINT_SEND_RECV		
 		printf(" got %d bytes\n", (int)recvPacket->len );
+		printPacketStats(*recvPacket);
 		if( (int)recvPacket->len == 0 ) printf("End of data\n");
 #endif
 
@@ -196,6 +197,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		}
 		#ifdef PRINT_SEND_RECV		
 			printf("Sent %d bytes.\n", curPktSize);			
+			printPacketStats( curPacket );
 		#endif	
 		/* Start the retry timer */
 		retryTimer.Start();
@@ -246,6 +248,10 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		perror("null packet sendto error");
 	}
 
+	#ifdef PRINT_SEND_RECV
+		printf("Sending null packet... Sent %d bytes\n", (int)HEADER_SIZE );
+		printPacketStats( *nullPacket );
+	#endif
 
 	return 0;
 }
@@ -333,7 +339,7 @@ pkt genPacket(char* chunk, int pSize, uint32_t seqno)
 
 uint16_t getLen()
 {
-	uint16_t len = DATA_SIZE + 12;
+	uint16_t len = DATA_SIZE + HEADER_SIZE;
 	return len;
 }
 

@@ -9,7 +9,7 @@
 #include <iostream>
 
 // Size of the data portion of the packet
-#define DATA_SIZE 1500
+#define DATA_SIZE 500
 
 struct pkt {
 	uint16_t cksum; /* Ack and Data */
@@ -202,6 +202,14 @@ void printPacket( pkt &p )
 	printf("Data    : %s\n", data );
 }
 
+void printPacketStats( pkt &p )
+{
+	printf("Checksum: %02x\n", p.cksum );
+	printf("Length  : %02x\n", p.len );
+	printf("Ackno   : %02x\n", p.ackno );
+	printf("Seqno   : %02x\n", p.seqno );
+	
+}
 
 /**
  * Compares two packets
