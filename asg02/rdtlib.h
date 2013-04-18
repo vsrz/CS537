@@ -339,7 +339,7 @@ pkt genPacket(char* chunk, int pSize, uint32_t seqno)
 
 	setPacketSize( &nextPacket, pSize + HEADER_SIZE );
 	setSequenceNumber( &nextPacket, seqno );
-	setAcknowledgementNumber( &nextPacket, 0x00 );
+	setAcknowledgementNumber( &nextPacket, 0 );
 	setChecksum( &nextPacket );
 	memcpy(nextPacket.data, chunk, pSize);
 	return nextPacket;

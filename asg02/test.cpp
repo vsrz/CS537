@@ -49,8 +49,8 @@ int main( int argc, char **argv )
     //TestTimerFiring();
 	// TestPrintPacket();
 
-   TestRdtSender( argc, argv );
-   // TestRdtReceiver( argc, argv );
+   // TestRdtSender( argc, argv );
+   TestRdtReceiver( argc, argv );
     return 0;
 }
 
